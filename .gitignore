@@ -25,6 +25,8 @@ venv/
 ENV/
 .pytest_cache/
 backend/config/config.toml
+models/
+static/
 
 # Node.js
 node_modules/

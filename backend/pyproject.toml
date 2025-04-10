@@ -24,6 +24,10 @@ dependencies = [
     "aiofiles (>=23.2.1,<24.0.0)"
 ]
 
+[[tool.poetry.source]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+priority = "primary"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

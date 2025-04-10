@@ -14,15 +14,24 @@ from app.config import config
 class VALLESynthesizer:
     """使用VALL-E进行语音合成的类"""
 
-    def __init__(self, model_name: str = "tts_models/multilingual/multi-dataset/your_tts"):
+    def __init__(self, model_name: str = "tts_models/en/ljspeech/tacotron2-DDC"):
         """
         初始化VALL-E合成器
         
         Args:
-            model_name: TTS模型名称，默认使用YourTTS多语言模型
+            model_name: TTS模型名称，默认使用较小的英文模型
         """
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         logger.info(f"Using device: {self.device}")
+        
+        # 设置模型目录
+        model_dir = config.TTS_MODEL_DIR
+        os.environ["COQUI_TTS_MODEL_DIR"] = str(model_dir)
+        
+        # 检查模型是否已下载
+        model_path = model_dir / model_name.replace("/", "_")
+        if not model_path.exists():
+            logger.warning(f"Model not found at {model_path}, will download from remote")
         
         try:
             self.tts = TTS(model_name=model_name).to(self.device)
@@ -31,19 +40,19 @@ class VALLESynthesizer:
             logger.error(f"Error initializing TTS model: {e}")
             # 尝试使用备用模型
             try:
-                self.tts = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2").to(self.device)
-                logger.info("Using fallback model: xtts_v2")
+                self.tts = TTS(model_name="tts_models/en/ljspeech/glow-tts").to(self.device)
+                logger.info("Using fallback model: glow-tts")
             except Exception as e2:
                 logger.error(f"Error initializing fallback model: {e2}")
                 raise
 
-    async def synthesize(self, text: str, language: str = "zh", speaker_wav: Optional[str] = None) -> bytes:
+    async def synthesize(self, text: str, language: str = "en", speaker_wav: Optional[str] = None) -> bytes:
         """
         将文本合成为语音
         
         Args:
             text: 要合成的文本
-            language: 文本语言，默认为中文
+            language: 文本语言，默认为英文
             speaker_wav: 参考音频文件路径，用于声音克隆
             
         Returns:

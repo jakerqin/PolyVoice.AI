@@ -13,6 +13,7 @@ def get_project_root() -> Path:
 
 PROJECT_ROOT = get_project_root()
 WORKSPACE_ROOT = PROJECT_ROOT / "workspace"
+MODELS_DIR = PROJECT_ROOT / "models"
 
 
 class LLMSettings(BaseModel):
@@ -104,6 +105,11 @@ class Config:
     @property
     def llm(self) -> Dict[str, LLMSettings]:
         return self._config.llm
+        
+    @property
+    def TTS_MODEL_DIR(self) -> Path:
+        """获取TTS模型目录"""
+        return MODELS_DIR / "tts"
 
 
 config = Config()
