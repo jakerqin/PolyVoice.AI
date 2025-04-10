@@ -1,6 +1,0 @@
-[llm]
-model = "deepseek-ai/DeepSeek-R1"                               # The LLM model to use
-base_url = "https://api.302.ai/v1"                              # API endpoint URL
-api_key = "sk-tm8jSi8tYN9nmvk6IK03vG8FpWbywog6MyGeiS1arLMKjwaA" # Your API key
-max_tokens = 8192                                               # Maximum number of tokens in the response
-temperature = 0.0                                               # Controls randomness

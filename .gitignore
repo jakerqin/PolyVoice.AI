@@ -24,6 +24,7 @@ var/
 venv/
 ENV/
 .pytest_cache/
+backend/config/config.toml
 
 # Node.js
 node_modules/
@@ -41,7 +42,6 @@ coverage/
 
 # IDE
 .idea/
-.vscode/
 *.swp
 *.swo
 .project
