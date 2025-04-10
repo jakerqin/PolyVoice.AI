@@ -1,6 +1,22 @@
 [llm]
 model = "claude-3-5-sonnet"
+base_url = "https://api.claude.com/v1"
+api_key = "sk-..."
+max_tokens = 4096
+temperature = 0.0
+
+[llm.openai]
+model = "gpt-4o"
 base_url = "https://api.openai.com/v1"
 api_key = "sk-..."
 max_tokens = 4096
 temperature = 0.0
+
+[llm.azure]
+api_type= 'azure'
+model = "YOUR_MODEL_NAME" #"gpt-4o-mini"
+base_url = "{YOUR_AZURE_ENDPOINT.rstrip('/')}/openai/deployments/{AZURE_DEPOLYMENT_ID}"
+api_key = "AZURE API KEY"
+max_tokens = 8096
+temperature = 0.0
+api_version="AZURE API VERSION" #"2024-08-01-preview"

@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from app.api import router as speaking_coach_router
 
 app = FastAPI(title="PolyVoice API", description="Backend API for PolyVoice application")
 
@@ -11,6 +14,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 挂载静态文件目录
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# 添加API路由
+app.include_router(speaking_coach_router, prefix="/api/speaking-coach", tags=["speaking-coach"])
 
 @app.get("/")
 async def root():
