@@ -25,11 +25,16 @@ class LLMSettings(BaseModel):
     api_type: str = Field(..., description="AzureOpenai or Openai")
     api_version: str = Field(..., description="Azure Openai version if AzureOpenai")
 
+class TTSSettings(BaseModel):
+    model: str = Field(..., description="Model name")
+    language: str = Field(..., description="speak language")
+
+
 
 class AppConfig(BaseModel):
     """存储LLM的配置"""
     llm: Dict[str, LLMSettings]
-
+    tts: Dict[str, TTSSettings]
 
 class Config:
     """单例模式：获取LLM的配置，把AppConfig保存进_instance中"""
@@ -74,6 +79,7 @@ class Config:
         """Load the configuration"""
         raw_config = self._load_config()
         base_llm = raw_config.get("llm", {})
+        base_tts = raw_config.get("tts", {})
         # [llm.openai] 会被解析为 {llm: {openai: {}}} 
         llm_overrides = {
             k: v for k, v in raw_config.get("llm", {}).items() if isinstance(v, dict)
@@ -97,7 +103,8 @@ class Config:
                     name: {**default_settings, **override_config}
                     for name, override_config in llm_overrides.items()
                 },
-            }
+            },
+            "tts": base_tts
         }
 
         self._config = AppConfig(**config_dict)
@@ -105,6 +112,10 @@ class Config:
     @property
     def llm(self) -> Dict[str, LLMSettings]:
         return self._config.llm
+    
+    @property
+    def tts(self) -> Dict[str, TTSSettings]:
+        return self._config.tts
         
     @property
     def TTS_MODEL_DIR(self) -> Path:

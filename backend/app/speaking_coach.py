@@ -1,23 +1,22 @@
 import json
-import os
-import tempfile
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from loguru import logger
 
 from app.llm import DeepSeekLLM
 from app.speech_recognition import WhisperRecognizer
-from app.speech_synthesis import VALLESynthesizer
-
+from app.speech_synthesis import EdgeTTS
+from app.config import Config
+from app.prompt.coach import SYSTEM_PROMPT
+# 加载配置
+config = Config()
 
 class SpeakingCoach:
     """口语教练类，整合语音识别、语音合成和大语言模型"""
 
     def __init__(
         self,
-        llm_model: str = "deepseek-chat",
-        tts_model: str = "tts_models/multilingual/multi-dataset/your_tts",
-        language: str = "zh",
+        language: str = "en",
         system_prompt: Optional[str] = None
     ):
         """
@@ -29,30 +28,18 @@ class SpeakingCoach:
             language: 默认语言
             system_prompt: 系统提示
         """
-        self.language = language
-        self.system_prompt = system_prompt or self._get_default_system_prompt()
+        self.language = config.tts.get("language", "en")
+        self.system_prompt = SYSTEM_PROMPT
         
         # 初始化各个组件
-        self.llm = DeepSeekLLM(model_name=llm_model)
+        self.llm = DeepSeekLLM()
         self.recognizer = WhisperRecognizer()
-        self.synthesizer = VALLESynthesizer(model_name=tts_model)
+        self.synthesizer = EdgeTTS()
         
         # 对话历史
-        self.conversation_history: List[Dict[str, str]] = []
+        self.conversation_history: List[dict] = []
         
         logger.info("SpeakingCoach initialized")
-
-    def _get_default_system_prompt(self) -> str:
-        """获取默认系统提示"""
-        return """你是一位专业的口语教练，擅长帮助学生提高口语水平。
-                    你的任务是：
-                    1. 评估学生的口语表达，指出语法、发音和表达方式上的问题
-                    2. 提供改进建议和练习方法
-                    3. 根据学生的水平调整对话难度
-                    4. 鼓励学生多说，建立自信
-                    5. 在适当的时候提供相关词汇和表达方式
-
-                请用中文回复，除非学生要求使用其他语言。"""
 
     async def process_audio_input(self, audio_bytes: bytes) -> Tuple[str, bytes]:
         """
@@ -66,31 +53,13 @@ class SpeakingCoach:
         """
         try:
             # 1. 语音识别：将音频转换为文本
-            user_text = await self.recognizer.transcribe_from_bytes(audio_bytes, self.language)
-            logger.info(f"Recognized text: {user_text}")
-            
-            # 2. 添加到对话历史
-            self.conversation_history.append({"role": "user", "content": user_text})
-            
-            # 3. 生成响应
-            response_text = await self.llm.generate_with_history(
-                self.conversation_history,
-                system_prompt=self.system_prompt
-            )
-            logger.info(f"Generated response: {response_text}")
-            
-            # 4. 添加到对话历史
-            self.conversation_history.append({"role": "assistant", "content": response_text})
-            
-            # 5. 语音合成：将文本转换为音频
-            response_audio = await self.synthesizer.synthesize(response_text, self.language)
-            
-            return response_text, response_audio
+            user_text = self.recognizer.transcribe_from_bytes(audio_bytes)
+            return await self._process_text_input(user_text)
         except Exception as e:
             logger.error(f"Error processing audio input: {e}")
             raise
 
-    async def process_text_input(self, text: str) -> Tuple[str, bytes]:
+    async def _process_text_input(self, text: str) -> Tuple[str, bytes]:
         """
         处理文本输入，返回文本响应和音频响应
         
@@ -105,9 +74,10 @@ class SpeakingCoach:
             self.conversation_history.append({"role": "user", "content": text})
             
             # 2. 生成响应
+            # 创建包含系统提示的消息列表
+            messages_with_system = [{"role": "system", "content": self.system_prompt}] + self.conversation_history
             response_text = await self.llm.generate_with_history(
-                self.conversation_history,
-                system_prompt=self.system_prompt
+                messages_with_system
             )
             logger.info(f"Generated response: {response_text}")
             
@@ -115,14 +85,14 @@ class SpeakingCoach:
             self.conversation_history.append({"role": "assistant", "content": response_text})
             
             # 4. 语音合成：将文本转换为音频
-            response_audio = await self.synthesizer.synthesize(response_text, self.language)
+            response_audio = await self.synthesizer.synthesize(response_text)
             
             return response_text, response_audio
         except Exception as e:
             logger.error(f"Error processing text input: {e}")
             raise
 
-    async def get_conversation_history(self) -> List[Dict[str, str]]:
+    async def get_conversation_history(self) -> List[dict]:
         """
         获取对话历史
         

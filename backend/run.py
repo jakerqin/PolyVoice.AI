@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent))
 
 import uvicorn
-from app.app import app
+from fastapi_app import app
 
 
 def main():
@@ -16,7 +16,7 @@ def main():
     
     # 启动应用程序
     uvicorn.run(
-        "app.app:app",
+        "fastapi_app:app",
         host="0.0.0.0",
         port=8000,
         reload=True

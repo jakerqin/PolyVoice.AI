@@ -9,14 +9,14 @@ from app.config import config
 class DeepSeekLLM:
     """使用DeepSeek-V3的大语言模型类"""
 
-    def __init__(self, model_name: str = "deepseek-chat"):
+    def __init__(self):
         """
         初始化DeepSeek-V3模型
         
         Args:
             model_name: 模型名称，默认为deepseek-chat
         """
-        self.model_name = model_name
+        self.model_name = config.llm["default"].model
         self.api_key = config.llm["default"].api_key
         self.base_url = config.llm["default"].base_url
         self.max_tokens = config.llm["default"].max_tokens
@@ -24,16 +24,17 @@ class DeepSeekLLM:
         
         self.client = openai.OpenAI(
             api_key=self.api_key,
-            base_url=self.base_url
+            base_url=self.base_url,
+            model=self.model_name,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature
         )
-        logger.info(f"DeepSeekLLM initialized with model: {model_name}")
+        logger.info(f"DeepSeekLLM initialized with model: {self.model_name}")
 
     async def generate(
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
         stop: Optional[Union[str, List[str]]] = None
     ) -> str:
         """
@@ -60,8 +61,8 @@ class DeepSeekLLM:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
-                temperature=temperature or self.temperature,
-                max_tokens=max_tokens or self.max_tokens,
+                temperature= self.temperature,
+                max_tokens= self.max_tokens,
                 stop=stop
             )
             
@@ -73,8 +74,6 @@ class DeepSeekLLM:
     async def generate_with_history(
         self,
         messages: List[Dict[str, str]],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
         stop: Optional[Union[str, List[str]]] = None
     ) -> str:
         """
@@ -93,8 +92,8 @@ class DeepSeekLLM:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
-                temperature=temperature or self.temperature,
-                max_tokens=max_tokens or self.max_tokens,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
                 stop=stop
             )
             

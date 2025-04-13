@@ -20,3 +20,8 @@ api_key = "AZURE API KEY"
 max_tokens = 8096
 temperature = 0.0
 api_version="AZURE API VERSION" #"2024-08-01-preview"
+
+
+[tts]
+model = "tts_models/multilingual/multi-dataset/your_tts"
+language = "en"
