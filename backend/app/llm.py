@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional, Union
 
 import openai
-from loguru import logger
+from app.logger import logger
 
 from app.config import config
 
@@ -24,10 +24,7 @@ class DeepSeekLLM:
         
         self.client = openai.OpenAI(
             api_key=self.api_key,
-            base_url=self.base_url,
-            model=self.model_name,
-            max_tokens=self.max_tokens,
-            temperature=self.temperature
+            base_url=self.base_url
         )
         logger.info(f"DeepSeekLLM initialized with model: {self.model_name}")
 

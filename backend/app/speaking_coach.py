@@ -1,11 +1,12 @@
 import json
+import os
 from typing import List, Optional, Tuple
 
 from loguru import logger
 
 from app.llm import DeepSeekLLM
 from app.speech_recognition import WhisperRecognizer
-from app.speech_synthesis import EdgeTTS
+from app.speech_synthesis import CoquiTTS
 from app.config import Config
 from app.prompt.coach import SYSTEM_PROMPT
 # 加载配置
@@ -28,13 +29,25 @@ class SpeakingCoach:
             language: 默认语言
             system_prompt: 系统提示
         """
-        self.language = config.tts.get("language", "en")
+        self.language = config.tts.language
         self.system_prompt = SYSTEM_PROMPT
+        
+        # 获取模型路径
+        tts_model_name = config.tts.model
+        tts_model_path = config.TTS_MODEL_DIR
+        whisper_model_path = config.WHISPER_MODEL_DIR
+        
+        # 检查模型路径是否存在
+        if os.path.exists(tts_model_path):
+            logger.info(f"使用本地TTS模型: {tts_model_path}")
+        else:
+            logger.warning(f"本地TTS模型未找到: {tts_model_path}，将尝试使用模型名称: {tts_model_name}")
+            tts_model_path = None
         
         # 初始化各个组件
         self.llm = DeepSeekLLM()
-        self.recognizer = WhisperRecognizer()
-        self.synthesizer = EdgeTTS()
+        self.recognizer = WhisperRecognizer(whisper_model_path)
+        self.synthesizer = CoquiTTS(model_name=tts_model_name, model_path=tts_model_path)
         
         # 对话历史
         self.conversation_history: List[dict] = []
@@ -54,12 +67,12 @@ class SpeakingCoach:
         try:
             # 1. 语音识别：将音频转换为文本
             user_text = self.recognizer.transcribe_from_bytes(audio_bytes)
-            return await self._process_text_input(user_text)
+            return await self.process_text_input(user_text)
         except Exception as e:
             logger.error(f"Error processing audio input: {e}")
             raise
 
-    async def _process_text_input(self, text: str) -> Tuple[str, bytes]:
+    async def process_text_input(self, text: str) -> Tuple[str, bytes]:
         """
         处理文本输入，返回文本响应和音频响应
         

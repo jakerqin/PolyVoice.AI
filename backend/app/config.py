@@ -12,8 +12,6 @@ def get_project_root() -> Path:
 
 
 PROJECT_ROOT = get_project_root()
-WORKSPACE_ROOT = PROJECT_ROOT / "workspace"
-MODELS_DIR = PROJECT_ROOT / "models"
 
 
 class LLMSettings(BaseModel):
@@ -22,19 +20,25 @@ class LLMSettings(BaseModel):
     api_key: str = Field(..., description="API key")
     max_tokens: int = Field(4096, description="Maximum number of tokens per request")
     temperature: float = Field(1.0, description="Sampling temperature")
-    api_type: str = Field(..., description="AzureOpenai or Openai")
-    api_version: str = Field(..., description="Azure Openai version if AzureOpenai")
+    api_type: str = Field(None, description="AzureOpenai or Openai")
+    api_version: str = Field(None, description="Azure Openai version if AzureOpenai")
 
 class TTSSettings(BaseModel):
     model: str = Field(..., description="Model name")
+    model_path: str = Field(..., description="local tts model path")
     language: str = Field(..., description="speak language")
+
+class WhisperSettings(BaseModel):
+    model: str = Field(..., description="Model name")
+    whisper_path: str = Field(..., description="local whisper model path")
 
 
 
 class AppConfig(BaseModel):
     """存储LLM的配置"""
     llm: Dict[str, LLMSettings]
-    tts: Dict[str, TTSSettings]
+    tts: TTSSettings
+    whisper: WhisperSettings
 
 class Config:
     """单例模式：获取LLM的配置，把AppConfig保存进_instance中"""
@@ -80,6 +84,7 @@ class Config:
         raw_config = self._load_config()
         base_llm = raw_config.get("llm", {})
         base_tts = raw_config.get("tts", {})
+        base_whisper = raw_config.get("whisper", {})
         # [llm.openai] 会被解析为 {llm: {openai: {}}} 
         llm_overrides = {
             k: v for k, v in raw_config.get("llm", {}).items() if isinstance(v, dict)
@@ -104,7 +109,8 @@ class Config:
                     for name, override_config in llm_overrides.items()
                 },
             },
-            "tts": base_tts
+            "tts": base_tts,
+            "whisper": base_whisper
         }
 
         self._config = AppConfig(**config_dict)
@@ -114,13 +120,18 @@ class Config:
         return self._config.llm
     
     @property
-    def tts(self) -> Dict[str, TTSSettings]:
+    def tts(self) -> TTSSettings:
         return self._config.tts
         
     @property
     def TTS_MODEL_DIR(self) -> Path:
         """获取TTS模型目录"""
-        return MODELS_DIR / "tts"
+        return str(PROJECT_ROOT / self._config.tts.model_path)
+    
+    @property
+    def WHISPER_MODEL_DIR(self) -> Path:
+        """获取Whisper模型目录"""
+        return str(PROJECT_ROOT / self._config.whisper.whisper_path)
 
 
 config = Config()

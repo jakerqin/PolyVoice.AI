@@ -18,17 +18,17 @@ class WhisperRecognizer:
         """
         if model_path is None:
             # 使用默认模型路径
-            model_path = os.path.join(os.path.dirname(__file__), "..", "models", "whisper", "base")
+            model_path = os.path.join(os.path.dirname(__file__), "..", "models", "whisper")
         
-        # 针对 M4 芯片优化配置
+        # 针对 CPU 设备优化配置
         self.model = WhisperModel(
             model_path,
-            device="mps",  # 使用 Metal Performance Shaders
-            compute_type="float16",  # 使用 float16 精度，在 32GB 内存下可以保证性能
+            device="cpu",  
+            compute_type="int8",  # 使用 int8 量化，CPU 设备支持并且效率更高
             cpu_threads=8,  # 设置 CPU 线程数
             num_workers=2   # 设置工作线程数
         )
-        logger.info(f"Initialized Whisper model from {model_path}")
+        logger.info(f"Initialized Whisper model from {model_path} using CPU with int8 compute type")
     
     def transcribe_from_file(self, audio_path: str) -> str:
         """

@@ -1,146 +1,85 @@
-import os
-from typing import List, Optional
-
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-
+import uuid
+from fastapi import APIRouter, Body, BackgroundTasks, HTTPException
 from app.speaking_coach import SpeakingCoach
+from app.logger import logger
 
 router = APIRouter()
+# 存储任务状态
+tasks = {}
 
 # 创建口语教练实例
 speaking_coach = SpeakingCoach()
 
-
-class TextResponse(BaseModel):
-    """文本响应模型"""
-    text: str
-
-
-class ConversationMessage(BaseModel):
-    """对话消息模型"""
-    role: str
-    content: str
-
-
-class ConversationHistory(BaseModel):
-    """对话历史模型"""
-    messages: List[ConversationMessage]
-
-
-@router.post("/speak", response_class=JSONResponse)
-async def speak(
-    audio: UploadFile = File(...),
-    language: Optional[str] = Form(None)
+@router.post("/task")
+async def start_chat(
+    background_tasks: BackgroundTasks,
+    user_prompt: str = Body(...)
 ):
     """
-    处理语音输入，返回文本和音频响应
+    开始聊天接口
     
     Args:
-        audio: 音频文件
-        language: 语言代码
+        request: 包含用户提示词的请求体
         
     Returns:
-        文本和音频响应
+        任务ID
+    """
+    # 生成任务ID
+    task_id = str(uuid.uuid4())
+    logger.info(f"开始聊天任务: {task_id}, 用户提示词: {user_prompt}")
+    # 初始化任务状态
+    tasks[task_id] = {
+        "status": "pending",
+        "result": None,
+        "error": None
+    }
+    
+    # 异步处理聊天任务
+    background_tasks.add_task(process_chat, task_id, user_prompt)
+    
+    return {"task_id": task_id}
+
+@router.get("/chat_status/{task_id}")
+async def chat_status(task_id: str):
+    """
+    获取聊天任务状态
+    
+    Args:
+        task_id: 任务ID
+        
+    Returns:
+        任务状态
+    """
+    if task_id not in tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return tasks[task_id]
+
+async def process_chat(task_id: str, user_prompt: str):
+    """
+    处理聊天任务
+    
+    Args:
+        task_id: 任务ID
+        prompt: 用户输入的提示词
+        model_name: 使用的模型名称
     """
     try:
-        # 读取音频文件
-        audio_bytes = await audio.read()
+        # 更新任务状态为处理中
+        tasks[task_id]["status"] = "processing"
+        logger.info(f"处理聊天任务: {task_id}, 用户提示词: {user_prompt}")
         
-        # 处理音频输入
-        response_text, response_audio = await speaking_coach.process_audio_input(audio_bytes)
+        # 调用口语教练处理文本输入
+        response_text, response_audio = await speaking_coach.process_text_input(user_prompt)
         
-        # 返回响应
-        return {
+        # 更新任务状态为完成
+        tasks[task_id]["status"] = "completed"
+        tasks[task_id]["result"] = {
             "text": response_text,
-            "audio": response_audio.hex()  # 将字节转换为十六进制字符串
+            "audio": response_audio.hex() if response_audio else None
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/chat", response_class=JSONResponse)
-async def chat(
-    text: str = Form(...),
-    language: Optional[str] = Form(None)
-):
-    """
-    处理文本输入，返回文本和音频响应
-    
-    Args:
-        text: 文本输入
-        language: 语言代码
-        
-    Returns:
-        文本和音频响应
-    """
-    try:
-        # 处理文本输入
-        response_text, response_audio = await speaking_coach.process_text_input(text)
-        
-        # 返回响应
-        return {
-            "text": response_text,
-            "audio": response_audio.hex()  # 将字节转换为十六进制字符串
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/history", response_model=ConversationHistory)
-async def get_history():
-    """
-    获取对话历史
-    
-    Returns:
-        对话历史
-    """
-    try:
-        history = await speaking_coach.get_conversation_history()
-        return ConversationHistory(messages=[
-            ConversationMessage(role=msg["role"], content=msg["content"])
-            for msg in history
-        ])
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/history/clear")
-async def clear_history():
-    """清空对话历史"""
-    try:
-        await speaking_coach.clear_conversation_history()
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/history/save")
-async def save_history(file_path: str = Form(...)):
-    """
-    保存对话历史到文件
-    
-    Args:
-        file_path: 文件路径
-    """
-    try:
-        await speaking_coach.save_conversation_history(file_path)
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/history/load")
-async def load_history(file_path: str = Form(...)):
-    """
-    从文件加载对话历史
-    
-    Args:
-        file_path: 文件路径
-    """
-    try:
-        await speaking_coach.load_conversation_history(file_path)
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        # 更新任务状态为失败
+        tasks[task_id]["status"] = "failed"
+        tasks[task_id]["error"] = str(e)
+        logger.error(f"处理聊天任务失败: {task_id}, 错误信息: {str(e)}")

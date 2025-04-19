@@ -22,6 +22,12 @@ temperature = 0.0
 api_version="AZURE API VERSION" #"2024-08-01-preview"
 
 
+# 语音合成配置
 [tts]
-model = "tts_models/multilingual/multi-dataset/your_tts"
+model = "tts_models/multilingual/multi-dataset/xtts_v2"
+model_path = "models/tts"
 language = "en"
+
+[whisper]
+model = "small"
+whisper_path = "models/whisper"
