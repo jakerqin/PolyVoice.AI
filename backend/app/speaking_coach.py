@@ -1,6 +1,7 @@
 import json
 import os
-from typing import List, Optional, Tuple
+import re
+from typing import List, Optional, Tuple, Dict, Any, AsyncGenerator
 
 from loguru import logger
 
@@ -17,8 +18,7 @@ class SpeakingCoach:
 
     def __init__(
         self,
-        language: str = "en",
-        system_prompt: Optional[str] = None
+        language: str = "en"
     ):
         """
         初始化口语教练
@@ -29,7 +29,7 @@ class SpeakingCoach:
             language: 默认语言
             system_prompt: 系统提示
         """
-        self.language = config.tts.language
+        self.language = config.tts.language or language
         self.system_prompt = SYSTEM_PROMPT
         
         # 获取模型路径
@@ -54,97 +54,86 @@ class SpeakingCoach:
         
         logger.info("SpeakingCoach initialized")
 
-    async def process_audio_input(self, audio_bytes: bytes) -> Tuple[str, bytes]:
+    async def process_audio_input_stream(self, audio_bytes: bytes) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        处理音频输入，返回文本响应和音频响应
+        流式处理音频输入
         
         Args:
-            audio_bytes: 用户音频输入
-            
-        Returns:
-            文本响应和音频响应
+            audio_bytes: 音频字节数据
+        
+        Yields:
+            包含类型和数据的字典
         """
         try:
             # 1. 语音识别：将音频转换为文本
             user_text = self.recognizer.transcribe_from_bytes(audio_bytes)
-            return await self.process_text_input(user_text)
+            logger.info(f"识别的文本: {user_text}")
+            
+            # 输出识别的文本
+            yield {"type": "recognized_text", "data": user_text}
+            
+            # 2. 流式处理文本输入
+            async for response in self.process_text_input_stream(user_text):
+                yield response
+                
         except Exception as e:
-            logger.error(f"Error processing audio input: {e}")
+            logger.error(f"流式处理音频输入失败: {str(e)}")
+            yield {"type": "error", "data": str(e)}
             raise
 
-    async def process_text_input(self, text: str) -> Tuple[str, bytes]:
+    
+    
+    async def process_text_input_stream(self, text: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        处理文本输入，返回文本响应和音频响应
+        流式处理文本输入
         
         Args:
-            text: 用户文本输入
-            
-        Returns:
-            文本响应和音频响应
+            text: 用户输入的文本
+        
+        Yields:
+            包含类型和数据的字典：
+            - 文本类型: {"type": "text", "data": 文本块}
+            - 音频类型: {"type": "audio", "data": 音频字节的十六进制字符串}
         """
         try:
             # 1. 添加到对话历史
             self.conversation_history.append({"role": "user", "content": text})
             
-            # 2. 生成响应
-            # 创建包含系统提示的消息列表
+            # 2. 生成流式响应
             messages_with_system = [{"role": "system", "content": self.system_prompt}] + self.conversation_history
-            response_text = await self.llm.generate_with_history(
-                messages_with_system
-            )
-            logger.info(f"Generated response: {response_text}")
             
-            # 3. 添加到对话历史
-            self.conversation_history.append({"role": "assistant", "content": response_text})
+            # 用于保存完整响应的缓冲区
+            full_response = ""
+            text_buffer = ""
             
-            # 4. 语音合成：将文本转换为音频
-            response_audio = await self.synthesizer.synthesize(response_text)
+            # 从LLM获取流式响应
+            async for text_chunk in self.llm.generate_stream(messages_with_system):
+                full_response += text_chunk
+                text_buffer += text_chunk
+                
+                # 输出文本块
+                yield {"type": "text", "data": text_chunk}
+                
+                # 当文本缓冲区达到一定大小或包含完整句子时，生成音频
+                if len(text_buffer) >= 50 or re.search(r'[.!?。！？]', text_buffer):
+                    # 异步生成音频并发送
+                    audio_bytes = await self.synthesizer.synthesize(text_buffer, language=self.language)
+                    yield {"type": "audio", "data": audio_bytes.hex()}
+                    text_buffer = ""  # 清空缓冲区
             
-            return response_text, response_audio
+            # 处理剩余的文本缓冲区
+            if text_buffer:
+                audio_bytes = await self.synthesizer.synthesize(text_buffer, language=self.language)
+                yield {"type": "audio", "data": audio_bytes.hex()}
+            
+            # 3. 添加完整响应到对话历史
+            self.conversation_history.append({"role": "assistant", "content": full_response})
+            
         except Exception as e:
-            logger.error(f"Error processing text input: {e}")
+            logger.error(f"流式处理文本输入失败: {str(e)}")
+            # 输出错误信息
+            yield {"type": "error", "data": str(e)}
             raise
-
-    async def get_conversation_history(self) -> List[dict]:
-        """
-        获取对话历史
-        
-        Returns:
-            对话历史
-        """
-        return self.conversation_history
-
-    async def clear_conversation_history(self) -> None:
-        """清空对话历史"""
-        self.conversation_history = []
-        logger.info("Conversation history cleared")
-
-    async def save_conversation_history(self, file_path: str) -> None:
-        """
-        保存对话历史到文件
-        
-        Args:
-            file_path: 文件路径
-        """
-        try:
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(self.conversation_history, f, ensure_ascii=False, indent=2)
-            logger.info(f"Conversation history saved to {file_path}")
-        except Exception as e:
-            logger.error(f"Error saving conversation history: {e}")
-            raise
-
-    async def load_conversation_history(self, file_path: str) -> None:
-        """
-        从文件加载对话历史
-        
-        Args:
-            file_path: 文件路径
-        """
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                self.conversation_history = json.load(f)
-            logger.info(f"Conversation history loaded from {file_path}")
-        except Exception as e:
-            logger.error(f"Error loading conversation history: {e}")
-            raise 
+    
+    
+    

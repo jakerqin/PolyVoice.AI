@@ -1,85 +1,77 @@
+import os
 import uuid
-from fastapi import APIRouter, Body, BackgroundTasks, HTTPException
+from typing import List, Optional
+
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, UploadFile, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
+import json
+
 from app.speaking_coach import SpeakingCoach
 from app.logger import logger
 
 router = APIRouter()
-# 存储任务状态
-tasks = {}
 
 # 创建口语教练实例
 speaking_coach = SpeakingCoach()
 
-@router.post("/task")
-async def start_chat(
-    background_tasks: BackgroundTasks,
-    user_prompt: str = Body(...)
+# 存储任务状态
+tasks = {}
+
+
+class TextResponse(BaseModel):
+    """文本响应模型"""
+    text: str
+
+
+class ConversationMessage(BaseModel):
+    """对话消息模型"""
+    role: str
+    content: str
+    audio: bytes
+
+
+class ConversationHistory(BaseModel):
+    """对话历史模型"""
+    messages: List[ConversationMessage]
+
+
+@router.post("/stream_audio_chat")
+async def stream_audio_chat(
+    request: Request,
+    audio: UploadFile = File(...)
 ):
     """
-    开始聊天接口
+    流式音频聊天接口
     
     Args:
-        request: 包含用户提示词的请求体
+        audio: 音频文件
         
     Returns:
-        任务ID
-    """
-    # 生成任务ID
-    task_id = str(uuid.uuid4())
-    logger.info(f"开始聊天任务: {task_id}, 用户提示词: {user_prompt}")
-    # 初始化任务状态
-    tasks[task_id] = {
-        "status": "pending",
-        "result": None,
-        "error": None
-    }
-    
-    # 异步处理聊天任务
-    background_tasks.add_task(process_chat, task_id, user_prompt)
-    
-    return {"task_id": task_id}
-
-@router.get("/chat_status/{task_id}")
-async def chat_status(task_id: str):
-    """
-    获取聊天任务状态
-    
-    Args:
-        task_id: 任务ID
-        
-    Returns:
-        任务状态
-    """
-    if task_id not in tasks:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    return tasks[task_id]
-
-async def process_chat(task_id: str, user_prompt: str):
-    """
-    处理聊天任务
-    
-    Args:
-        task_id: 任务ID
-        prompt: 用户输入的提示词
-        model_name: 使用的模型名称
+        流式响应
     """
     try:
-        # 更新任务状态为处理中
-        tasks[task_id]["status"] = "processing"
-        logger.info(f"处理聊天任务: {task_id}, 用户提示词: {user_prompt}")
+        # 读取音频文件
+        audio_bytes = await audio.read()
         
-        # 调用口语教练处理文本输入
-        response_text, response_audio = await speaking_coach.process_text_input(user_prompt)
+        async def event_generator():
+            try:
+                # 使用流式处理音频输入
+                async for response in speaking_coach.process_audio_input_stream(audio_bytes):
+                    if await request.is_disconnected():
+                        logger.info("客户端断开连接")
+                        break
+                        
+                    # 将响应转换为JSON字符串
+                    yield json.dumps(response)
+                    
+            except Exception as e:
+                logger.error(f"流式音频聊天出错: {str(e)}")
+                yield json.dumps({"type": "error", "data": str(e)})
         
-        # 更新任务状态为完成
-        tasks[task_id]["status"] = "completed"
-        tasks[task_id]["result"] = {
-            "text": response_text,
-            "audio": response_audio.hex() if response_audio else None
-        }
+        return EventSourceResponse(event_generator())
     except Exception as e:
-        # 更新任务状态为失败
-        tasks[task_id]["status"] = "failed"
-        tasks[task_id]["error"] = str(e)
-        logger.error(f"处理聊天任务失败: {task_id}, 错误信息: {str(e)}")
+        logger.error(f"处理音频文件出错: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+

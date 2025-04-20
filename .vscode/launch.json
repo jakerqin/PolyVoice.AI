@@ -5,6 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python Debugger: test_speaking_coach.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/test_speaking_coach.py",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "debugger run.py",
             "type": "debugpy",
             "request": "launch",

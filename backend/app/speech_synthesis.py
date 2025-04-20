@@ -1,11 +1,10 @@
-import tempfile
 from pathlib import Path
 import os
 import torch
-from typing import Optional, Union
-
+from typing import Optional
 from TTS.api import TTS
-from loguru import logger
+from app.logger import logger
+import numpy as np
 
 
 class CoquiTTS:
@@ -57,15 +56,20 @@ class CoquiTTS:
                     raise FileNotFoundError(f"配置文件不存在: {model_config_path}")
                 
                 # 尝试只使用目录路径
-                device = "cuda" if torch.cuda.is_available() else "cpu"
+                device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
                 self.tts = TTS(config_path=model_config_path, model_path=model_path, progress_bar=True).to(device)
+                logger.info(f"TTS模型加载到设备: {device}")
             else:
                 # 否则使用模型名称（触发下载）
                 logger.info(f"使用模型名称加载TTS模型: {model_name}")
                 # 设置模型目录环境变量
                 models_dir = os.path.join(os.path.dirname(__file__), "..", "models")
                 os.environ["TTS_HOME"] = models_dir
-                self.tts = TTS(model_name)
+                
+                # 使用适合的设备
+                device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
+                self.tts = TTS(model_name).to(device)
+                logger.info(f"TTS模型加载到设备: {device}")
                 
             logger.info(f"成功初始化 CoquiTTS，使用模型: {model_name}")
         except Exception as e:
@@ -75,8 +79,7 @@ class CoquiTTS:
     async def synthesize(
         self,
         text: str,
-        language: str = "en",
-        speaker_wav: Optional[str] = None
+        language: str = "en"
     ) -> bytes:
         """
         将文本转换为语音
@@ -92,14 +95,10 @@ class CoquiTTS:
         Raises:
             RuntimeError: 当语音合成失败时抛出
         """
-        temp_path = None
         try:
-            # 创建临时文件
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-                temp_path = temp_file.name
             
             # 使用提供的speaker_wav或实例的speaker_wav
-            reference_wav = speaker_wav or self.speaker_wav
+            reference_wav = os.path.join(os.path.dirname(__file__), "..", "assets", "speakers", "default.wav")
             
             # 检查当前模型是否是 XTTS 模型
             is_xtts = "xtts" in self.model_name.lower()
@@ -111,7 +110,6 @@ class CoquiTTS:
                 # 检查是否有参考音频
                 if not reference_wav:
                     # 寻找默认参考音频
-                    reference_wav = os.path.join(os.path.dirname(__file__), "..", "assets", "speakers", "default.wav")
                     if os.path.exists(reference_wav):
                         logger.info(f"使用默认参考音频: {reference_wav}")
                     else:
@@ -120,64 +118,30 @@ class CoquiTTS:
                 
                 # 直接使用 TTS 方法合成音频（XTTS 特定参数）
                 logger.info(f"使用 XTTS 合成音频: text={text}, language={language}, speaker_wav={reference_wav}")
-                wav_bytes = self.tts.synthesize(
+                wav_bytes = self.tts.tts(
                     text=text,
                     speaker_wav=reference_wav,
                     language=language,
-                    stream=True  # todo: LLM 需要流式输出, 语音需要流式播放
                 )
                 
-                # 将音频字节写入临时文件
-                import numpy as np
-                import soundfile as sf
-                sf.write(temp_path, np.array(wav_bytes), self.sample_rate)
+                # 将 numpy.float32 数组转换为字节流
+                if isinstance(wav_bytes, list):
+                    # 将列表转换为 numpy 数组
+                    audio_array = np.array(wav_bytes, dtype=np.float32)
+                    # 将浮点数转换为 16 位整数
+                    # 32767 = 2^15 - 1，是 16 位有符号整数的最大值
+                    MAX_16BIT = 2**15 - 1
+                    audio_array = (audio_array * MAX_16BIT).astype(np.int16)
+                    # 转换为字节
+                    wav_bytes = audio_array.tobytes()
+                
+                return wav_bytes
             else:
-                # 非 XTTS 模型使用 tts_to_file 方法
-                logger.info(f"使用标准 TTS 合成音频: text={text}, language={language}")
-                self.tts.tts_to_file(text=text, file_path=temp_path)
-            
-            # 读取音频文件
-            with open(temp_path, "rb") as f:
-                audio_bytes = f.read()
-            
-            logger.info(f"成功合成语音，文本长度: {len(text)}，语言: {language}")
-            return audio_bytes
+                raise ValueError("不支持的模型类型")
             
         except Exception as e:
             error_msg = f"语音合成失败: {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
-            
-        finally:
-            # 清理临时文件
-            if temp_path and Path(temp_path).exists():
-                try:
-                    Path(temp_path).unlink()
-                except Exception as e:
-                    logger.warning(f"清理临时文件失败: {str(e)}")
     
-    def get_available_models(self) -> list[str]:
-        """
-        获取可用的TTS模型列表
-        
-        Returns:
-            可用模型名称列表
-        """
-        try:
-            return TTS().list_models()
-        except Exception as e:
-            logger.error(f"获取可用模型列表失败: {str(e)}")
-            return []
     
-    def get_supported_languages(self) -> list[str]:
-        """
-        获取当前模型支持的语言列表
-        
-        Returns:
-            支持的语言代码列表
-        """
-        try:
-            return self.tts.languages
-        except Exception as e:
-            logger.error(f"获取支持的语言列表失败: {str(e)}")
-            return [] 
