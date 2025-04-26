@@ -90,7 +90,7 @@ class CoquiTTS:
             speaker_wav: 可选的说话人参考音频文件路径，用于声音克隆
         
         Returns:
-            音频字节数据
+            MP3格式的音频字节数据
             
         Raises:
             RuntimeError: 当语音合成失败时抛出
@@ -118,24 +118,45 @@ class CoquiTTS:
                 
                 # 直接使用 TTS 方法合成音频（XTTS 特定参数）
                 logger.info(f"使用 XTTS 合成音频: text={text}, language={language}, speaker_wav={reference_wav}")
-                wav_bytes = self.tts.tts(
+                origin_audio = self.tts.tts(
                     text=text,
                     speaker_wav=reference_wav,
                     language=language,
                 )
                 
-                # 将 numpy.float32 数组转换为字节流
-                if isinstance(wav_bytes, list):
+                # 将 numpy.float32 原始音频波形 数组转换为字节流
+                if isinstance(origin_audio, list):
                     # 将列表转换为 numpy 数组
-                    audio_array = np.array(wav_bytes, dtype=np.float32)
+                    audio_array = np.array(origin_audio, dtype=np.float32)
                     # 将浮点数转换为 16 位整数
-                    # 32767 = 2^15 - 1，是 16 位有符号整数的最大值
                     MAX_16BIT = 2**15 - 1
                     audio_array = (audio_array * MAX_16BIT).astype(np.int16)
-                    # 转换为字节
-                    wav_bytes = audio_array.tobytes()
-                
-                return wav_bytes
+                    # 转换为PCM字节
+                    pcm_bytes = audio_array.tobytes()
+                    
+                    # 根据origin_audio生成mp3音频
+                    from pydub import AudioSegment
+                    import io
+                    
+                    # 创建AudioSegment对象
+                    audio_segment = AudioSegment(
+                        data=pcm_bytes,
+                        sample_width=2,  # 16位 = 2字节
+                        frame_rate=self.sample_rate,  # 使用实例中的采样率
+                        channels=1  # 单声道
+                    )
+                    
+                    # 导出为MP3格式
+                    mp3_io = io.BytesIO()
+                    audio_segment.export(mp3_io, format="mp3", bitrate="192k")
+                    mp3_bytes = mp3_io.getvalue()
+                    
+                    logger.info(f"音频已转换为MP3格式: {len(mp3_bytes)} 字节")
+                    return mp3_bytes
+                else:
+                    # 如果不是列表，记录警告并尝试转换
+                    logger.warning(f"TTS返回了意外的数据类型: {type(origin_audio)}")
+                    raise RuntimeError(f"无法处理TTS模型的输出: {e}")
             else:
                 raise ValueError("不支持的模型类型")
             

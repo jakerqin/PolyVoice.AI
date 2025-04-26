@@ -1,10 +1,6 @@
-import os
-import uuid
-from typing import List, Optional
-
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, UploadFile, Request
+from fastapi import APIRouter, File, HTTPException, UploadFile, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 import json
 
@@ -16,25 +12,12 @@ router = APIRouter()
 # 创建口语教练实例
 speaking_coach = SpeakingCoach()
 
-# 存储任务状态
-tasks = {}
-
-
-class TextResponse(BaseModel):
-    """文本响应模型"""
-    text: str
-
-
 class ConversationMessage(BaseModel):
     """对话消息模型"""
-    role: str
-    content: str
-    audio: bytes
-
-
-class ConversationHistory(BaseModel):
-    """对话历史模型"""
-    messages: List[ConversationMessage]
+    type: str = Field(..., description="消息类型，可以是'text'、'audio'、'error'或'recognized_text'")
+    text: str = Field(..., description="文本内容，对于文本类型消息存储文本内容")
+    # mp3 音频字节转成base64
+    audio: str = Field("", description="音频内容，存储为base64编码的字符串，仅当type为'audio'时有值")
 
 
 @router.post("/stream_audio_chat")
@@ -63,8 +46,15 @@ async def stream_audio_chat(
                         logger.info("客户端断开连接")
                         break
                         
-                    # 将响应转换为JSON字符串
-                    yield json.dumps(response)
+                    # 将响应转换为ConversationMessage格式
+                    conversation_message = ConversationMessage(
+                        type=response["type"],
+                        text=response.get("data", ""),
+                        audio=response.get("data", "") if response["type"] == "audio" else ""
+                    )
+                    
+                    # 将ConversationMessage转换为JSON字符串
+                    yield json.dumps(conversation_message.model_dump())
                     
             except Exception as e:
                 logger.error(f"流式音频聊天出错: {str(e)}")

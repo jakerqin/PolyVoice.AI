@@ -21,3 +21,13 @@ body {
   flex-direction: column;
   min-height: 100vh;
 }
+
+/* 聊天页面铺满屏幕的样式 */
+.App-fullscreen {
+  max-width: 100%;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+}

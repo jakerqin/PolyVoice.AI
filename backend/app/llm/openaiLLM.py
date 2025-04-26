@@ -8,12 +8,12 @@ from app.config import config
 # 从配置文件中获取DeepSeek的配置
 LLM_KEY = 'default'
 
-class DeepSeekLLM(BaseLLM):
-    """使用DeepSeek的大语言模型类"""
+class OpenaiLLM(BaseLLM):
+    """使用openai框架的大语言模型类"""
 
     def __init__(self):
         """
-        初始化DeepSeek模型
+        初始化模型
 
         """
         # 调用父类初始化
@@ -25,7 +25,7 @@ class DeepSeekLLM(BaseLLM):
             api_key=self.api_key,
             base_url=self.base_url
         )
-        logger.info(f"DeepSeekLLM 已初始化客户端，模型: {self.model_name}")
+        logger.info(f"openaiLLM 已初始化客户端，模型: {self.model_name}")
 
     async def generate(
         self,

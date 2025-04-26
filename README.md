@@ -12,7 +12,7 @@ PolyVoice.AI 是一个基于大语言模型和多模态技术的智能口语教�
 
 ## 技术栈
 
-- **后端**：FastAPI, Python 3.10-3.11
+- **后端**：FastAPI, Python 3.11
 - **大语言模型**：DeepSeek-V3
 - **语音识别**：Whisper
 - **语音合成**：VALL-E (通过 TTS 库)

@@ -1,11 +1,10 @@
-import json
 import os
 import re
-from typing import List, Optional, Tuple, Dict, Any, AsyncGenerator
+from typing import List, Dict, Any, AsyncGenerator
 
 from loguru import logger
-
-from app.llm import DeepSeekLLM
+import base64
+from app.llm.openaiLLM import OpenaiLLM
 from app.speech_recognition import WhisperRecognizer
 from app.speech_synthesis import CoquiTTS
 from app.config import Config
@@ -45,7 +44,7 @@ class SpeakingCoach:
             tts_model_path = None
         
         # 初始化各个组件
-        self.llm = DeepSeekLLM()
+        self.llm = OpenaiLLM()
         self.recognizer = WhisperRecognizer(whisper_model_path)
         self.synthesizer = CoquiTTS(model_name=tts_model_name, model_path=tts_model_path)
         
@@ -93,7 +92,7 @@ class SpeakingCoach:
         Yields:
             包含类型和数据的字典：
             - 文本类型: {"type": "text", "data": 文本块}
-            - 音频类型: {"type": "audio", "data": 音频字节的十六进制字符串}
+            - 音频类型: {"type": "audio", "data": 音频字节的base64编码字符串, "format": "mp3"}
         """
         try:
             # 1. 添加到对话历史
@@ -115,16 +114,17 @@ class SpeakingCoach:
                 yield {"type": "text", "data": text_chunk}
                 
                 # 当文本缓冲区达到一定大小或包含完整句子时，生成音频
-                if len(text_buffer) >= 50 or re.search(r'[.!?。！？]', text_buffer):
+                if len(text_buffer) > 50 and text_buffer[-1] in '.!?。！？':
+                    logger.info(f"生成音频的文本: {text_buffer}") 
                     # 异步生成音频并发送
                     audio_bytes = await self.synthesizer.synthesize(text_buffer, language=self.language)
-                    yield {"type": "audio", "data": audio_bytes.hex()}
+                    yield {"type": "audio", "data": base64.b64encode(audio_bytes).decode('utf-8'), "format": "mp3"}
                     text_buffer = ""  # 清空缓冲区
             
             # 处理剩余的文本缓冲区
             if text_buffer:
                 audio_bytes = await self.synthesizer.synthesize(text_buffer, language=self.language)
-                yield {"type": "audio", "data": audio_bytes.hex()}
+                yield {"type": "audio", "data": base64.b64encode(audio_bytes).decode('utf-8'), "format": "mp3"}
             
             # 3. 添加完整响应到对话历史
             self.conversation_history.append({"role": "assistant", "content": full_response})

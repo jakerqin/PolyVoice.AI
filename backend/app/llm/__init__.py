@@ -4,9 +4,9 @@
 """
 
 from app.llm.base import BaseLLM
-from app.llm.deepseek import DeepSeekLLM
+from app.llm.openaiLLM import OpenaiLLM
 
 __all__ = [
     'BaseLLM',
-    'DeepSeekLLM',
+    'OpenaiLLM',
 ] 

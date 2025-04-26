@@ -2,11 +2,12 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+import base64
 
 # 添加项目根目录到Python路径
 sys.path.append(str(Path(__file__).resolve().parent))
 
-from app.speaking_coach import SpeakingCoach
+from app.api import speaking_coach
 
 
 async def test_audio_file_input(audio_file_path: str):
@@ -24,7 +25,7 @@ async def test_audio_file_input(audio_file_path: str):
         return None
     
     # 创建口语教练实例
-    coach = SpeakingCoach()
+    coach = speaking_coach
     
     try:
         # 读取音频文件
@@ -39,7 +40,7 @@ async def test_audio_file_input(audio_file_path: str):
         # 变量用于保存最终结果
         recognized_text = None
         response_text = None
-        response_audio = None
+        response_audio_chunks = []  # 用于收集所有音频片段
         
         # 使用 async for 处理异步生成器
         async for result in coach.process_audio_input_stream(audio_bytes):
@@ -56,28 +57,33 @@ async def test_audio_file_input(audio_file_path: str):
                 # 打印进度
                 print(f"收到文本块: {result['data']}")
             elif result["type"] == "audio":
-                # 保存最后一个音频块
-                response_audio = bytes.fromhex(result["data"])
-                print(f"收到音频块: {len(response_audio)} 字节")
+                # 收集所有音频片段
+                audio_chunk = base64.b64decode(result["data"])
+                audio_format = result.get("format", "mp3")  # 获取音频格式，默认为mp3
+                response_audio_chunks.append(audio_chunk)
+                print(f"收到音频块: {len(audio_chunk)} 字节, 格式: {audio_format}")
             elif result["type"] == "error":
                 print(f"错误: {result['data']}")
         
         if response_text:
             print(f"完整响应文本: {response_text}")
         
-        # 保存响应音频到文件
-        if response_audio:
-            os.makedirs("static", exist_ok=True)
-            response_audio_path = Path("backend/static/audio_response.wav")
+        # 保存合并后的音频到文件
+        if response_audio_chunks:
+            # 使用脚本所在目录创建正确的路径
+            script_dir = Path(__file__).resolve().parent
+            audio_dir = script_dir / "static"
+            os.makedirs(audio_dir, exist_ok=True)
+            
+            # 使用绝对路径保存文件
+            response_audio_path = audio_dir / "audio_response.mp3"
+            
+            # 简单合并方式 - 直接写入所有片段
             with open(response_audio_path, "wb") as f:
-                f.write(response_audio)
-            print(f"响应音频已保存到: {response_audio_path}")
+                for chunk in response_audio_chunks:
+                    f.write(chunk)
+            print(f"音频片段已合并并保存到: {response_audio_path}，片段数量: {len(response_audio_chunks)}")
         
-        # 获取对话历史
-        history = await coach.get_conversation_history()
-        print(f"对话历史: {history}")
-        
-        return coach
     
     except Exception as e:
         print(f"处理音频时出错: {str(e)}")
