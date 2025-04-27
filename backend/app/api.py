@@ -3,11 +3,15 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 import json
+import uuid
 
 from app.speaking_coach import SpeakingCoach
 from app.logger import logger
 
 router = APIRouter()
+
+# 全局字典存储会话数据
+audio_sessions = {}
 
 # 创建口语教练实例
 speaking_coach = SpeakingCoach()
@@ -21,22 +25,53 @@ class ConversationMessage(BaseModel):
 
 
 @router.post("/stream_audio_chat")
-async def stream_audio_chat(
-    request: Request,
+async def upload_audio(
     audio: UploadFile = File(...)
 ):
     """
-    流式音频聊天接口
+    上传音频文件接口
     
     Args:
         audio: 音频文件
         
     Returns:
-        流式响应
+        会话ID
     """
     try:
         # 读取音频文件
         audio_bytes = await audio.read()
+        
+        # 生成一个唯一的会话ID
+        session_id = str(uuid.uuid4())
+        
+        # 存储音频数据以供后续处理
+        audio_sessions[session_id] = audio_bytes
+        
+        return {"session_id": session_id}
+    except Exception as e:
+        logger.error(f"处理音频文件上传出错: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/stream_audio_chat/{session_id}")
+async def stream_audio_chat(
+    request: Request,
+    session_id: str
+):
+    """
+    流式音频聊天接口
+    
+    Args:
+        session_id: 会话ID
+        
+    Returns:
+        流式响应
+    """
+    try:
+        # 获取之前上传的音频数据
+        if session_id not in audio_sessions:
+            raise HTTPException(status_code=404, detail="会话不存在或已过期")
+            
+        audio_bytes = audio_sessions[session_id]
         
         async def event_generator():
             try:
@@ -55,13 +90,20 @@ async def stream_audio_chat(
                     
                     # 将ConversationMessage转换为JSON字符串
                     yield json.dumps(conversation_message.model_dump())
+                
+                # 处理完成后删除会话数据
+                if session_id in audio_sessions:
+                    del audio_sessions[session_id]
                     
             except Exception as e:
                 logger.error(f"流式音频聊天出错: {str(e)}")
-                yield json.dumps({"type": "error", "data": str(e)})
+                yield json.dumps({"type": "error", "text": str(e)})
+                
+                # 发生错误时也需要清理
+                if session_id in audio_sessions:
+                    del audio_sessions[session_id]
         
         return EventSourceResponse(event_generator())
     except Exception as e:
-        logger.error(f"处理音频文件出错: {str(e)}")
+        logger.error(f"处理流式响应出错: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
