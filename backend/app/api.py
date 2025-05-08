@@ -91,10 +91,13 @@ async def stream_audio_chat(
                     # 将ConversationMessage转换为JSON字符串
                     yield json.dumps(conversation_message.model_dump())
                 
+                # 输出结束后，发送type=end消息
+                yield json.dumps({"type": "end"})
+                
                 # 处理完成后删除会话数据
                 if session_id in audio_sessions:
                     del audio_sessions[session_id]
-                    
+                
             except Exception as e:
                 logger.error(f"流式音频聊天出错: {str(e)}")
                 yield json.dumps({"type": "error", "text": str(e)})

@@ -27,7 +27,7 @@ export class ApiService {
       // 先上传音频文件
       const formData = new FormData();
       formData.append("audio", audioBlob);
-      const response = await axios.post(`${API_BASE_URL}/api/upload_audio`, formData, {
+      const response = await axios.post(`${API_BASE_URL}/api/stream_audio_chat`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },

@@ -122,6 +122,7 @@ class CoquiTTS:
                     text=text,
                     speaker_wav=reference_wav,
                     language=language,
+                    attention_mask=None
                 )
                 
                 # 将 numpy.float32 原始音频波形 数组转换为字节流

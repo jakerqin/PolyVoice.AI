@@ -20,6 +20,7 @@ import {
   SendButton
 } from './style';
 import styled from 'styled-components';
+import ReactMarkdown from 'react-markdown';
 
 // 错误提示样式
 const ErrorContainer = styled.div`
@@ -161,6 +162,14 @@ export const ChatView: React.FC<ChatViewProps> = ({ userText, coachText, audioUr
     }
   }, [isTyping, coachText, displayedText, typingSpeed]);
 
+  useEffect(() => {
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
+
   return (
     <>
       {/* 显示错误信息 */}
@@ -179,7 +188,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ userText, coachText, audioUr
       {coachText && (
         <CoachMessage>
           <MessageBubble>
-            {displayedText}
+            <ReactMarkdown>{displayedText}</ReactMarkdown>
             {isTyping && <span className="typing-cursor"></span>}
           </MessageBubble>
           
@@ -253,9 +262,12 @@ const ChatPage: React.FC = () => {
   // 聊天状态
   const [userText, setUserText] = useState<string>("");
   const [coachText, setCoachText] = useState<string>("");
-  const [audioUrl, setAudioUrl] = useState<string>(initialAudioUrl || "");
+  const [audioUrl, setAudioUrl] = useState<string | null>(initialAudioUrl || null);
+  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [audioQueue, setAudioQueue] = useState<string[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
   
   // 模拟历史对话数据
   const chatHistory = [
@@ -305,20 +317,16 @@ const ChatPage: React.FC = () => {
         // 音频回调
         (audioData: string, format: string) => {
           try {
-            // 解码Base64数据
             const byteCharacters = atob(audioData);
             const byteNumbers = new Array(byteCharacters.length);
-            
             for (let i = 0; i < byteCharacters.length; i++) {
               byteNumbers[i] = byteCharacters.charCodeAt(i);
             }
-            
             const byteArray = new Uint8Array(byteNumbers);
             const blob = new Blob([byteArray], { type: `audio/${format}` });
-            
-            // 创建音频URL
             const url = URL.createObjectURL(blob);
-            setAudioUrl(url);
+
+            setAudioQueue(prev => [...prev, url]);
           } catch (e) {
             console.error("处理音频数据出错:", e);
           }
@@ -390,6 +398,27 @@ const ChatPage: React.FC = () => {
     }, 1500);
   };
   
+  useEffect(() => {
+    if (!isPlaying && audioQueue.length > 0) {
+      const url = audioQueue[0];
+      const audioObj = new Audio(url);
+      setIsPlaying(true);
+      setAudioUrl(url);
+
+      audioObj.play();
+      audioObj.onended = () => {
+        setIsPlaying(false);
+        setAudioQueue(prev => prev.slice(1));
+        URL.revokeObjectURL(url);
+      };
+      audioObj.onerror = () => {
+        setIsPlaying(false);
+        setAudioQueue(prev => prev.slice(1));
+        URL.revokeObjectURL(url);
+      };
+    }
+  }, [audioQueue, isPlaying]);
+  
   return (
     <ChatContainer>
       <ChatContent>
@@ -415,7 +444,7 @@ const ChatPage: React.FC = () => {
             <ChatView 
               userText={userText}
               coachText={coachText}
-              audioUrl={audioUrl}
+              audioUrl={audioUrl || ""}
               errorMessage={errorMessage}
             />
             

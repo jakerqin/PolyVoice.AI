@@ -24,6 +24,7 @@ PolyVoice.AI 是一个基于大语言模型和多模态技术的智能口语教�
 
 - Python 3.10-3.11
 - Poetry (Python 包管理器)
+- FFmpeg (用于音频处理)
 
 ### 安装步骤
 
@@ -37,6 +38,10 @@ cd PolyVoice.AI
 2. 安装依赖
 
 ```bash
+# 安装 FFmpeg (macOS)
+brew install ffmpeg
+
+# 安装 Python 依赖
 cd backend
 poetry install
 ```
