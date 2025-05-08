@@ -115,15 +115,19 @@ class SpeakingCoach:
                 
                 # 当文本缓冲区达到一定大小或包含完整句子时，生成音频
                 if len(text_buffer) > 50 and text_buffer[-1] in '.!?。！？':
-                    logger.info(f"生成音频的文本: {text_buffer}") 
+                    logger.info(f"生成音频的文本: {text_buffer}")
+                    # 针对text_buffer进行处理，因为文案中可能包含一些markdown之类的特殊符号，需要进行处理，只保留最原始的文本
+                    clean_text = self._clean_text_for_audio(text_buffer)
+                    
                     # 异步生成音频并发送
-                    audio_bytes = await self.synthesizer.synthesize(text_buffer, language=self.language)
+                    audio_bytes = await self.synthesizer.synthesize(clean_text, language=self.language)
                     yield {"type": "audio", "data": base64.b64encode(audio_bytes).decode('utf-8'), "format": "mp3"}
                     text_buffer = ""  # 清空缓冲区
             
             # 处理剩余的文本缓冲区
             if text_buffer:
-                audio_bytes = await self.synthesizer.synthesize(text_buffer, language=self.language)
+                clean_text = self._clean_text_for_audio(text_buffer)
+                audio_bytes = await self.synthesizer.synthesize(clean_text, language=self.language)
                 yield {"type": "audio", "data": base64.b64encode(audio_bytes).decode('utf-8'), "format": "mp3"}
             
             # 3. 添加完整响应到对话历史
@@ -134,6 +138,54 @@ class SpeakingCoach:
             # 输出错误信息
             yield {"type": "error", "data": str(e)}
             raise
+    
+    def _clean_text_for_audio(self, text: str) -> str:
+        """
+        处理文本，移除markdown标记和特殊字符，保留原始纯文本用于语音合成
+        
+        Args:
+            text: 输入文本，可能包含markdown标记
+            
+        Returns:
+            清理后的文本
+        """
+        # 移除markdown链接，保留链接文本
+        text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+        
+        # 移除markdown标题标记
+        text = re.sub(r'^#+\s+', '', text, flags=re.MULTILINE)
+        
+        # 移除markdown加粗和斜体
+        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # 加粗
+        text = re.sub(r'\*([^*]+)\*', r'\1', text)      # 斜体
+        text = re.sub(r'__([^_]+)__', r'\1', text)      # 加粗
+        text = re.sub(r'_([^_]+)_', r'\1', text)        # 斜体
+        
+        # 移除markdown代码块和行内代码
+        text = re.sub(r'```[a-zA-Z]*\n([\s\S]*?)\n```', r'\1', text)  # 代码块
+        text = re.sub(r'`([^`]+)`', r'\1', text)                      # 行内代码
+        
+        # 移除markdown列表标记
+        text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)  # 无序列表
+        text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)  # 有序列表
+        
+        # 移除markdown引用标记
+        text = re.sub(r'^\s*>\s+', '', text, flags=re.MULTILINE)
+        
+        # 处理HTML标签
+        text = re.sub(r'<[^>]+>', '', text)
+        
+        # 处理特殊转义字符
+        text = text.replace('&amp;', '&')
+        text = text.replace('&lt;', '<')
+        text = text.replace('&gt;', '>')
+        text = text.replace('&quot;', '"')
+        text = text.replace('&#39;', "'")
+        
+        # 移除多余的空白字符
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        return text
     
     
     

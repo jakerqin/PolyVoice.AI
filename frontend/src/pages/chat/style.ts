@@ -215,3 +215,94 @@ export const CoachMessage = styled.div`
     animation: ${blink} 0.7s infinite;
   }
 `; 
+
+// 错误提示样式
+export const ErrorContainer = styled.div`
+  background-color: rgba(220, 38, 38, 0.2);
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  color: #fecaca;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+`;
+
+export const ErrorMessage = styled.p`
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  text-align: center;
+`;
+
+export const RetryButton = styled.button`
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  
+  &:hover {
+    background-color: #b91c1c;
+  }
+`;
+
+// 右侧边栏样式
+export const SidebarTitle = styled.h2`
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 16px 0;
+  color: #333;
+`;
+
+export const HistoryItem = styled.div`
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  background-color: white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  
+  &:hover {
+    background-color: #f0f0f0;
+  }
+  
+  h3 {
+    font-size: 14px;
+    margin: 0 0 4px 0;
+    color: #333;
+  }
+  
+  p {
+    font-size: 12px;
+    margin: 0;
+    color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+`;
+
+export const InfoBox = styled.div`
+  margin-top: 24px;
+  padding: 16px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  
+  h3 {
+    font-size: 14px;
+    margin: 0 0 8px 0;
+    color: #333;
+  }
+  
+  p {
+    font-size: 12px;
+    margin: 0 0 8px 0;
+    color: #666;
+    line-height: 1.5;
+  }
+`;

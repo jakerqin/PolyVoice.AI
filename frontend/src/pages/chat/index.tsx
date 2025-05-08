@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { ApiService } from '../../services/api';
 import { ReactComponent as VoiceLogoSVG } from '../../assets/aiVoice.svg';
 import {
@@ -17,101 +17,16 @@ import {
   ChatMessagesContainer,
   InputBar,
   InputField,
-  SendButton
+  SendButton,
+  ErrorContainer,
+  ErrorMessage,
+  RetryButton,
+  SidebarTitle,
+  HistoryItem,
+  InfoBox,
 } from './style';
-import styled from 'styled-components';
 import ReactMarkdown from 'react-markdown';
 
-// 错误提示样式
-const ErrorContainer = styled.div`
-  background-color: rgba(220, 38, 38, 0.2);
-  border: 1px solid rgba(248, 113, 113, 0.5);
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
-  color: #fecaca;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-`;
-
-const ErrorMessage = styled.p`
-  margin: 0 0 10px 0;
-  font-size: 14px;
-  text-align: center;
-`;
-
-const RetryButton = styled.button`
-  background-color: #dc2626;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  
-  &:hover {
-    background-color: #b91c1c;
-  }
-`;
-
-// 右侧边栏样式
-const SidebarTitle = styled.h2`
-  font-size: 16px;
-  font-weight: 500;
-  margin: 0 0 16px 0;
-  color: #333;
-`;
-
-const HistoryItem = styled.div`
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  background-color: white;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  
-  &:hover {
-    background-color: #f0f0f0;
-  }
-  
-  h3 {
-    font-size: 14px;
-    margin: 0 0 4px 0;
-    color: #333;
-  }
-  
-  p {
-    font-size: 12px;
-    margin: 0;
-    color: #666;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-`;
-
-const InfoBox = styled.div`
-  margin-top: 24px;
-  padding: 16px;
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  
-  h3 {
-    font-size: 14px;
-    margin: 0 0 8px 0;
-    color: #333;
-  }
-  
-  p {
-    font-size: 12px;
-    margin: 0 0 8px 0;
-    color: #666;
-    line-height: 1.5;
-  }
-`;
 
 // 发送图标组件
 const SendIcon = () => (
@@ -253,17 +168,14 @@ interface MyEventSource {
 // 主聊天页面组件
 const ChatPage: React.FC = () => {
   const location = useLocation();
-  const navigate = useNavigate();
   
   // 获取从HomePage传递的状态
   const audioBlob = location.state?.audioBlob;
-  const initialAudioUrl = location.state?.audioUrl;
   
   // 聊天状态
   const [userText, setUserText] = useState<string>("");
   const [coachText, setCoachText] = useState<string>("");
-  const [audioUrl, setAudioUrl] = useState<string | null>(initialAudioUrl || null);
-  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [audioQueue, setAudioQueue] = useState<string[]>([]);
@@ -279,7 +191,6 @@ const ChatPage: React.FC = () => {
   // 处理用户直接访问聊天页面的情况
   useEffect(() => {
     if (!audioBlob && !location.state) {
-      // 不再重定向，只显示一个欢迎消息
       setIsProcessing(false);
     } else if (audioBlob) {
       // 如果有音频数据，处理录音
@@ -287,6 +198,7 @@ const ChatPage: React.FC = () => {
     } else {
       setIsProcessing(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   // 处理录音数据
