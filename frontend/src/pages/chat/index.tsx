@@ -24,8 +24,15 @@ import {
   SidebarTitle,
   HistoryItem,
   InfoBox,
+  DiagnosisContainer,
+  DiagnosisHeader,
+  DiagnosisTitle,
+  DiagnosisContent,
+  SuggestionItem
 } from './style';
 import ReactMarkdown from 'react-markdown';
+import { AdvancedDiagnosisButtonComponent, AdvancedDiagnosisSidebar } from '../../components/AdvancedDiagnosis';
+import { DiagnosisType } from '../../services/api';
 
 
 // 发送图标组件
@@ -41,9 +48,24 @@ interface ChatViewProps {
   coachText: string;
   audioUrl: string;
   errorMessage?: string;
+  pronunciationSuggestion?: string;
+  grammarSuggestion?: string;
+  userResponseSuggestion?: string;
+  onSuggestionClick?: (suggestion: string) => void;
+  onAdvancedDiagnosisClick?: (type: DiagnosisType, content: string) => void;
 }
 
-export const ChatView: React.FC<ChatViewProps> = ({ userText, coachText, audioUrl, errorMessage }) => {
+export const ChatView: React.FC<ChatViewProps> = ({ 
+  userText, 
+  coachText, 
+  audioUrl, 
+  errorMessage,
+  pronunciationSuggestion,
+  grammarSuggestion,
+  userResponseSuggestion,
+  onSuggestionClick,
+  onAdvancedDiagnosisClick
+}) => {
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const [displayedText, setDisplayedText] = useState<string>("");
   const [typingSpeed] = useState<number>(30); // 打字速度（毫秒/字符）
@@ -111,6 +133,70 @@ export const ChatView: React.FC<ChatViewProps> = ({ userText, coachText, audioUr
             <AudioPlayer>
               <audio controls src={audioUrl}></audio>
             </AudioPlayer>
+          )}
+
+          {/* 发音诊断 */}
+          {pronunciationSuggestion && (
+            <DiagnosisContainer>
+              <DiagnosisHeader>
+                <DiagnosisTitle>发音诊断</DiagnosisTitle>
+                {onAdvancedDiagnosisClick && (
+                  <AdvancedDiagnosisButtonComponent
+                    diagnosisType="pronunciation"
+                    diagnosisContent={pronunciationSuggestion}
+                    onAdvancedDiagnosisClick={() => onAdvancedDiagnosisClick("pronunciation", pronunciationSuggestion)}
+                  />
+                )}
+              </DiagnosisHeader>
+              <DiagnosisContent>
+                {pronunciationSuggestion}
+              </DiagnosisContent>
+            </DiagnosisContainer>
+          )}
+
+          {/* 语法诊断 */}
+          {grammarSuggestion && (
+            <DiagnosisContainer>
+              <DiagnosisHeader>
+                <DiagnosisTitle>语法诊断</DiagnosisTitle>
+                {onAdvancedDiagnosisClick && (
+                  <AdvancedDiagnosisButtonComponent
+                    diagnosisType="grammar"
+                    diagnosisContent={grammarSuggestion}
+                    onAdvancedDiagnosisClick={() => onAdvancedDiagnosisClick("grammar", grammarSuggestion)}
+                  />
+                )}
+              </DiagnosisHeader>
+              <DiagnosisContent>
+                {grammarSuggestion}
+              </DiagnosisContent>
+            </DiagnosisContainer>
+          )}
+
+          {/* 回答示例 */}
+          {userResponseSuggestion && (
+            <DiagnosisContainer>
+              <DiagnosisHeader>
+                <DiagnosisTitle>回答示例</DiagnosisTitle>
+                {onAdvancedDiagnosisClick && (
+                  <AdvancedDiagnosisButtonComponent
+                    diagnosisType="userResponse"
+                    diagnosisContent={userResponseSuggestion}
+                    onAdvancedDiagnosisClick={() => onAdvancedDiagnosisClick("userResponse", userResponseSuggestion)}
+                  />
+                )}
+              </DiagnosisHeader>
+              <DiagnosisContent>
+                {userResponseSuggestion.split(/\d+\./).filter(item => item.trim()).map((suggestion, index) => (
+                  <SuggestionItem 
+                    key={index} 
+                    onClick={() => onSuggestionClick && onSuggestionClick(suggestion.trim())}
+                  >
+                    {index + 1}. {suggestion.trim()}
+                  </SuggestionItem>
+                ))}
+              </DiagnosisContent>
+            </DiagnosisContainer>
           )}
         </CoachMessage>
       )}
@@ -180,6 +266,13 @@ const ChatPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [audioQueue, setAudioQueue] = useState<string[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [pronunciationSuggestion, setPronunciationSuggestion] = useState<string>("");
+  const [grammarSuggestion, setGrammarSuggestion] = useState<string>("");
+  const [userResponseSuggestion, setUserResponseSuggestion] = useState<string>("");
+  const [currentDiagnosis, setCurrentDiagnosis] = useState<{
+    type: DiagnosisType,
+    content: string
+  } | null>(null);
   
   // 模拟历史对话数据
   const chatHistory = [
@@ -205,6 +298,9 @@ const ChatPage: React.FC = () => {
   const processRecording = async (audioBlob: Blob) => {
     setIsProcessing(true);
     setErrorMessage(""); // 清除之前的错误
+    setPronunciationSuggestion(""); // 清除之前的发音建议
+    setGrammarSuggestion(""); // 清除之前的语法建议
+    setUserResponseSuggestion(""); // 清除之前的回答示例
     
     let eventSource: MyEventSource | null = null;
     
@@ -259,6 +355,21 @@ const ChatPage: React.FC = () => {
         // 完成回调
         () => {
           setIsProcessing(false);
+        },
+        
+        // 发音建议回调
+        (text: string) => {
+          setPronunciationSuggestion(text);
+        },
+        
+        // 语法建议回调
+        (text: string) => {
+          setGrammarSuggestion(text);
+        },
+        
+        // 用户响应建议回调
+        (text: string) => {
+          setUserResponseSuggestion(text);
         }
       );
       
@@ -331,6 +442,21 @@ const ChatPage: React.FC = () => {
     }
   }, [audioQueue, isPlaying]);
   
+  // 处理示例回答点击
+  const handleSuggestionClick = (suggestion: string) => {
+    handleSendMessage(suggestion);
+  };
+  
+  // 处理高级诊断请求
+  const handleAdvancedDiagnosisClick = (type: DiagnosisType, content: string) => {
+    setCurrentDiagnosis({ type, content });
+  };
+  
+  // 返回历史视图
+  const handleBackToHistory = () => {
+    setCurrentDiagnosis(null);
+  };
+  
   return (
     <ChatContainer>
       <ChatContent>
@@ -358,6 +484,11 @@ const ChatPage: React.FC = () => {
               coachText={coachText}
               audioUrl={audioUrl || ""}
               errorMessage={errorMessage}
+              pronunciationSuggestion={pronunciationSuggestion}
+              grammarSuggestion={grammarSuggestion}
+              userResponseSuggestion={userResponseSuggestion}
+              onSuggestionClick={handleSuggestionClick}
+              onAdvancedDiagnosisClick={handleAdvancedDiagnosisClick}
             />
             
             {errorMessage && (
@@ -375,26 +506,36 @@ const ChatPage: React.FC = () => {
           <InputBarComponent onSendMessage={handleSendMessage} />
         </ChatMainArea>
         <ChatSidebar>
-          <SidebarTitle>对话历史</SidebarTitle>
-          
-          {chatHistory.map(chat => (
-            <HistoryItem key={chat.id}>
-              <h3>{chat.title}</h3>
-              <p>{chat.date}</p>
-              <p>{chat.preview}</p>
-            </HistoryItem>
-          ))}
-          
-          <InfoBox>
-            <h3>PolyVoice.AI 语音助手</h3>
-            <p>
-              我们的AI语音教练可以帮助您提高口语能力，纠正发音，提供实时反馈。
-              通过日常练习，您将快速提升语言技能。
-            </p>
-            <p>
-              提示：点击左侧麦克风图标开始录音，或直接在输入框中键入文字进行对话。
-            </p>
-          </InfoBox>
+          {currentDiagnosis ? (
+            <AdvancedDiagnosisSidebar
+              diagnosisType={currentDiagnosis.type}
+              diagnosisContent={currentDiagnosis.content}
+              onBack={handleBackToHistory}
+            />
+          ) : (
+            <>
+              <SidebarTitle>对话历史</SidebarTitle>
+              
+              {chatHistory.map(chat => (
+                <HistoryItem key={chat.id}>
+                  <h3>{chat.title}</h3>
+                  <p>{chat.date}</p>
+                  <p>{chat.preview}</p>
+                </HistoryItem>
+              ))}
+              
+              <InfoBox>
+                <h3>PolyVoice.AI 语音助手</h3>
+                <p>
+                  我们的AI语音教练可以帮助您提高口语能力，纠正发音，提供实时反馈。
+                  通过日常练习，您将快速提升语言技能。
+                </p>
+                <p>
+                  提示：点击左侧麦克风图标开始录音，或直接在输入框中键入文字进行对话。
+                </p>
+              </InfoBox>
+            </>
+          )}
         </ChatSidebar>
       </ChatContent>
     </ChatContainer>

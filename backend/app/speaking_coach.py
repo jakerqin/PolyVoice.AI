@@ -91,7 +91,10 @@ class SpeakingCoach:
         
         Yields:
             包含类型和数据的字典：
-            - 文本类型: {"type": "text", "data": 文本块}
+            - 响应类型: {"type": "response", "data": 响应文本}
+            - 发音建议类型: {"type": "pronunciationSuggestion", "data": 发音建议文本}
+            - 语法建议类型: {"type": "grammarSuggestion", "data": 语法建议文本}
+            - 用户响应建议类型: {"type": "userResponseSuggestion", "data": 用户响应建议文本}
             - 音频类型: {"type": "audio", "data": 音频字节的base64编码字符串, "format": "mp3"}
         """
         try:
@@ -103,32 +106,86 @@ class SpeakingCoach:
             
             # 用于保存完整响应的缓冲区
             full_response = ""
-            text_buffer = ""
+            
+            # XML解析状态和缓冲区
+            current_tag = None
+            content_buffer = ""
+            tag_start_pattern = re.compile(r'<(response|pronunciationSuggestion|grammarSuggestion|userResponseSuggestion)>')
+            tag_end_pattern = re.compile(r'</(response|pronunciationSuggestion|grammarSuggestion|userResponseSuggestion)>')
             
             # 从LLM获取流式响应
             async for text_chunk in self.llm.generate_stream(messages_with_system):
                 full_response += text_chunk
-                text_buffer += text_chunk
                 
-                # 输出文本块
-                yield {"type": "text", "data": text_chunk}
-                
-                # 当文本缓冲区达到一定大小或包含完整句子时，生成音频
-                if len(text_buffer) > 50 and text_buffer[-1] in '.!?。！？':
-                    logger.info(f"生成音频的文本: {text_buffer}")
-                    # 针对text_buffer进行处理，因为文案中可能包含一些markdown之类的特殊符号，需要进行处理，只保留最原始的文本
-                    clean_text = self._clean_text_for_audio(text_buffer)
+                # 处理当前文本块
+                i = 0
+                while i < len(text_chunk):
+                    char = text_chunk[i]
                     
-                    # 异步生成音频并发送
-                    audio_bytes = await self.synthesizer.synthesize(clean_text, language=self.language)
-                    yield {"type": "audio", "data": base64.b64encode(audio_bytes).decode('utf-8'), "format": "mp3"}
-                    text_buffer = ""  # 清空缓冲区
+                    # 检查开始标签
+                    if char == '<' and current_tag is None:
+                        # 尝试匹配开始标签
+                        tag_match = None
+                        for j in range(i, min(i + 35, len(text_chunk))):
+                            partial_tag = text_chunk[i:j+1]
+                            start_match = tag_start_pattern.match(partial_tag)
+                            if start_match:
+                                tag_match = start_match
+                                current_tag = start_match.group(1)
+                                i = j + 1
+                                break
+                        
+                        if tag_match:
+                            content_buffer = ""  # 重置内容缓冲区
+                            continue
+                    
+                    # 检查结束标签
+                    if char == '<' and current_tag is not None:
+                        # 尝试匹配结束标签
+                        for j in range(i, min(i + 36, len(text_chunk))):
+                            partial_tag = text_chunk[i:j+1]
+                            end_match = tag_end_pattern.match(partial_tag)
+                            if end_match and end_match.group(1) == current_tag:
+                                # 发送标签内容
+                                if content_buffer:
+                                    clean_content = content_buffer.strip()
+                                    if clean_content:
+                                        yield {"type": current_tag, "data": clean_content}
+                                        
+                                        # 为response生成音频
+                                        if current_tag == "response":
+                                            clean_text = self._clean_text_for_audio(clean_content)
+                                            audio_bytes = await self.synthesizer.synthesize(clean_text, language=self.language)
+                                            yield {"type": "audio", "data": base64.b64encode(audio_bytes).decode('utf-8'), "format": "mp3"}
+                                
+                                current_tag = None
+                                content_buffer = ""
+                                i = j + 1
+                                break
+                        
+                        if current_tag is None:  # 如果找到结束标签
+                            continue
+                    
+                    # 在标签内部收集内容
+                    if current_tag is not None:
+                        content_buffer += char
+                    else:
+                        # 不在任何标签内，可能是其他文本或未完成的标签
+                        yield {"type": "text", "data": char}
+                    
+                    i += 1
             
-            # 处理剩余的文本缓冲区
-            if text_buffer:
-                clean_text = self._clean_text_for_audio(text_buffer)
-                audio_bytes = await self.synthesizer.synthesize(clean_text, language=self.language)
-                yield {"type": "audio", "data": base64.b64encode(audio_bytes).decode('utf-8'), "format": "mp3"}
+            # 异常情况兜底
+            if current_tag is not None and content_buffer:
+                clean_content = content_buffer.strip()
+                if clean_content:
+                    yield {"type": current_tag, "data": clean_content}
+                    
+                    # 为response生成音频
+                    if current_tag == "response":
+                        clean_text = self._clean_text_for_audio(clean_content)
+                        audio_bytes = await self.synthesizer.synthesize(clean_text, language=self.language)
+                        yield {"type": "audio", "data": base64.b64encode(audio_bytes).decode('utf-8'), "format": "mp3"}
             
             # 3. 添加完整响应到对话历史
             self.conversation_history.append({"role": "assistant", "content": full_response})

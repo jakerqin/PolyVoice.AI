@@ -9,9 +9,9 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
     "fastapi (>=0.115.12,<0.116.0)",
     "uvicorn (>=0.34.0,<0.35.0)",
-    "pydantic (>=2.11.3,<3.0.0)",
+    "pydantic (>=2.10.4,<2.11.0)",
     "python-dotenv (>=1.1.0,<2.0.0)",
-    "browser-use (>=0.1.40,<0.2.0)",
+    "browser-use (>=0.1.45,<0.2.0)",
     "loguru (>=0.7.3,<0.8.0)",
     "googlesearch-python (>=1.3.0,<2.0.0)",
     "tomli (>=2.2.1,<3.0.0)",
@@ -24,7 +24,8 @@ dependencies = [
     "tokenizers (>=0.21,<0.22)",
     "soundfile (>=0.13.1,<0.14.0)",
     "sse-starlette (>=2.2.1,<3.0.0)",
-    "pydub (>=0.25.1,<0.26.0)"
+    "pydub (>=0.25.1,<0.26.0)",
+    "pyautogen (>=0.9,<0.10)"
 ]
 
 [[tool.poetry.source]]

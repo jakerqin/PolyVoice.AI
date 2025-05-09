@@ -306,3 +306,173 @@ export const InfoBox = styled.div`
     line-height: 1.5;
   }
 `;
+
+// 添加诊断和建议的样式组件
+export const DiagnosisContainer = styled.div`
+  background-color: rgba(30, 224, 93, 0.1);
+  border: 1px solid rgba(30, 224, 93, 0.3);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-top: 10px;
+  max-width: 90%;
+`;
+
+export const DiagnosisTitle = styled.h3`
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: #1fe05d;
+`;
+
+export const DiagnosisContent = styled.div`
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.9);
+`;
+
+export const SuggestionItem = styled.div`
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background-color 0.2s;
+  
+  &:last-child {
+    border-bottom: none;
+  }
+  
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding-left: 8px;
+  }
+`;
+
+// 高级诊断区域样式
+export const AdvancedDiagnosisButton = styled.button`
+  background-color: rgba(30, 224, 93, 0.2);
+  color: #1fe05d;
+  border: 1px solid rgba(30, 224, 93, 0.4);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    background-color: rgba(30, 224, 93, 0.3);
+  }
+`;
+
+export const DiagnosisHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+`;
+
+export const DiagnosisBackButton = styled.button`
+  background: none;
+  border: none;
+  color: #333;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  padding: 0;
+  margin-right: 10px;
+  
+  svg {
+    margin-right: 5px;
+    width: 16px;
+    height: 16px;
+  }
+  
+  &:hover {
+    color: #4f46e5;
+  }
+`;
+
+export const SidebarHeader = styled.div`
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+`;
+
+export const KeywordContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+`;
+
+export const KeywordTag = styled.div`
+  background-color: #e5e7eb;
+  color: #4b5563;
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 12px;
+`;
+
+export const SearchResultsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+`;
+
+export const SearchResultItem = styled.div`
+  background-color: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+export const VideoThumbnail = styled.img`
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+`;
+
+export const SearchResultTitle = styled.h3`
+  font-size: 14px;
+  margin: 0;
+  padding: 10px;
+  color: #333;
+`;
+
+export const SearchLoading = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100px;
+  color: #6b7280;
+  font-size: 14px;
+`;
+
+export const LogsContainer = styled.div`
+  background-color: #1e293b;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+`;
+
+export const LogEntry = styled.div`
+  margin-bottom: 4px;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
