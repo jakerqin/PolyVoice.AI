@@ -1,14 +1,8 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile, Request
-from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 import json
 import uuid
-from fastapi import BackgroundTasks
-import os
-import logging
-from typing import Dict, List, Optional
-
 from app.speaking_coach import SpeakingCoach
 from app.logger import logger
 
@@ -117,9 +111,12 @@ async def stream_audio_chat(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class DiagnosisRequest(BaseModel):
+    content: str
+
 @router.post("/diagnosis/{diagnosis_type}")
 async def pre_advanced_diagnosis(
-    content: str,
+    request: DiagnosisRequest,
     diagnosis_type: str
 ):
      
@@ -134,7 +131,7 @@ async def pre_advanced_diagnosis(
         会话ID
     """
     try:
-        if not content or not diagnosis_type:
+        if not request.content or not diagnosis_type:
             raise HTTPException(status_code=400, detail="诊断内容不能为空")
         
         # 生成一个唯一的会话ID
@@ -142,7 +139,7 @@ async def pre_advanced_diagnosis(
         
         # 存储音频数据以供后续处理
         diagnosis_sessions[session_id] = {
-            "content": content,
+            "content": request.content,
             "diagnosis_type": diagnosis_type
         }
         
@@ -184,16 +181,10 @@ async def advanced_diagnosis(
             
         async def event_generator():
             try:
-                # 流式回调函数
-                async def send_log(message: str):
-                    if await request.is_disconnected():
-                        return
-                    yield json.dumps({"type": "log", "data": message})
-                
                 # 调用智能体系统
                 from app.agents import start_diagnosis_session
                 
-                async for result in start_diagnosis_session(diagnosis_content, diagnosis_type, send_log):
+                async for result in start_diagnosis_session(diagnosis_content, diagnosis_type):
                     if await request.is_disconnected():
                         logger.info("客户端断开连接")
                         break
@@ -202,15 +193,21 @@ async def advanced_diagnosis(
                     yield json.dumps(result)
                 
                 # 发送完成事件
-                yield json.dumps({"status": "complete", "message": "诊断完成"})
+                yield json.dumps({"type": "complete", "data": "诊断完成"})
+                # 处理完成后删除会话数据
+                if session_id in diagnosis_sessions:
+                    del diagnosis_sessions[session_id]
                 
             except Exception as e:
                 logger.error(f"高级诊断流式处理出错: {str(e)}")
-                yield json.dumps({"status": "error", "message": str(e)})
+                logger.error(e.format_exc())
+                yield json.dumps({"type": "error", "data": str(e)})
         
         # 返回SSE响应
         return EventSourceResponse(event_generator())
         
     except Exception as e:
         logger.error(f"高级诊断接口出错: {str(e)}")
+        # 打印调用栈
+        logger.error(e.format_exc())
         raise HTTPException(status_code=500, detail=str(e))

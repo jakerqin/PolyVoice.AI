@@ -144,64 +144,56 @@ export class ApiService {
     onContentEvent: (content: any) => void,
     onErrorEvent: (error: string) => void,
     onCompleteEvent: () => void
-  ): EventSource {
-    try {
-      // 首先发送内容到后端
-      fetch(`${API_BASE_URL}/api/advanced_diagnosis/${type}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
-      }).catch(error => {
+  ): void {
+    // 首先发送内容到后端
+    fetch(`${API_BASE_URL}/api/advanced_diagnosis/${type}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ content }),
+    })
+      .then(async response => {
+        if (!response.ok) throw new Error('请求失败');
+        const data = await response.json();
+        const sessionId = data.session_id;
+        if (!sessionId) throw new Error('未获取到会话ID');
+        // 然后创建EventSource连接
+        const eventSource = new EventSource(`${API_BASE_URL}/api/advanced_diagnosis/${type}/${sessionId}`);
+        // 处理事件
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data) as DiagnosisEvent;
+            if (data.type === 'log' && data.data) {
+              onLogEvent(data.data);
+            } else if (data.status === 'extracted' && data.data) {
+              onExtractedEvent(data.data);
+            } else if (data.status === 'complete' && data.results) {
+              onSearchEvent(data.results);
+              eventSource.close();
+            } else if (data.status === 'content') {
+              onContentEvent({
+                title: data.title || '',
+                url: data.url || '',
+                content: data.content || ''
+              });
+            } else if (data.status === 'error') {
+              onErrorEvent(data.message || '未知错误');
+              eventSource.close();
+            }
+          } catch (error) {
+            console.error("解析事件数据失败:", error);
+            onErrorEvent("解析响应失败");
+          }
+        };
+        eventSource.onerror = (error) => {
+          console.error("EventSource错误:", error);
+          onErrorEvent("连接错误");
+          eventSource.close();
+        };
+      })
+      .catch(error => {
         onErrorEvent(`请求失败: ${error.message}`);
       });
-      
-      // 然后创建EventSource连接
-      const eventSource = new EventSource(`${API_BASE_URL}/api/advanced_diagnosis/${type}`);
-      
-      // 处理事件
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as DiagnosisEvent;
-          
-          // 根据事件类型分发回调
-          if (data.type === 'log' && data.data) {
-            onLogEvent(data.data);
-          } else if (data.status === 'extracted' && data.data) {
-            onExtractedEvent(data.data);
-          } else if (data.status === 'complete' && data.results) {
-            onSearchEvent(data.results);
-          } else if (data.status === 'content') {
-            onContentEvent({
-              title: data.title || '',
-              url: data.url || '',
-              content: data.content || ''
-            });
-          } else if (data.status === 'error') {
-            onErrorEvent(data.message || '未知错误');
-            eventSource.close();
-          } else if (data.status === 'complete') {
-            onCompleteEvent();
-            eventSource.close();
-          }
-        } catch (error) {
-          console.error("解析事件数据失败:", error);
-          onErrorEvent("解析响应失败");
-        }
-      };
-      
-      eventSource.onerror = (error) => {
-        console.error("EventSource错误:", error);
-        onErrorEvent("连接错误");
-        eventSource.close();
-      };
-      
-      return eventSource;
-    } catch (error: any) {
-      console.error("高级诊断请求失败:", error);
-      onErrorEvent(`高级诊断请求失败: ${error.message}`);
-      throw error;
-    }
   }
 }

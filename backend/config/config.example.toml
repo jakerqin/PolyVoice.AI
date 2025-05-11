@@ -1,4 +1,5 @@
 [llm]
+api_type= 'claude'
 model = "claude-3-5-sonnet"
 base_url = "https://api.claude.com/v1"
 api_key = "sk-..."
@@ -6,6 +7,7 @@ max_tokens = 4096
 temperature = 0.0
 
 [llm.openai]
+api_type= 'openai'
 model = "gpt-4o"
 base_url = "https://api.openai.com/v1"
 api_key = "sk-..."

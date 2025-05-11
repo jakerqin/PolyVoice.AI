@@ -5,8 +5,7 @@ from app.logger import logger
 from app.llm.base import BaseLLM
 from app.config import config
 
-# 从配置文件中获取DeepSeek的配置
-LLM_KEY = 'default'
+
 
 class OpenaiLLM(BaseLLM):
     """使用openai框架的大语言模型类"""
@@ -17,7 +16,7 @@ class OpenaiLLM(BaseLLM):
 
         """
         # 调用父类初始化
-        super().__init__(config.llm[LLM_KEY])
+        super().__init__(config.default_llm)
 
     def _initialize_client(self):
         """初始化OpenAI客户端"""

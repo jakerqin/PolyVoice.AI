@@ -4,30 +4,19 @@
 使用browser-use框架进行网络搜索和内容提取
 """
 
-import asyncio
-import logging
-from typing import List, Dict, Any, AsyncGenerator, Callable
-
-from browser_use import BrowserUse
-
-logger = logging.getLogger(__name__)
+import traceback
+from typing import List
+from browser_use import Agent
+from app.logger import logger
+from app.config import config
+from langchain_openai import ChatOpenAI
 
 class BrowserAgent:
     """
     浏览器智能体，负责执行网络搜索和内容提取任务
     """
     
-    def __init__(self, callback: Callable[[str], None] = None):
-        """
-        初始化浏览器智能体
-        
-        Args:
-            callback: 回调函数，用于流式返回日志
-        """
-        self.browser = BrowserUse()
-        self.callback = callback
-    
-    async def search_content(self, keywords: List[str], query_type: str) -> AsyncGenerator[Dict[str, Any], None]:
+    async def search_content(self, keywords: List[str], query_type: str):
         """
         搜索相关教学内容
         
@@ -41,72 +30,45 @@ class BrowserAgent:
         # 构建搜索查询
         search_query = f"{' '.join(keywords)} {query_type} 教学视频"
         
-        # 记录日志并通过回调发送
+        # 记录日志
         log_message = f"🔍 浏览器智能体开始搜索: {search_query}"
         logger.info(log_message)
-        if self.callback:
-            self.callback(log_message)
-        
-        yield {"status": "searching", "message": log_message}
+        yield {"type": "log", "data": log_message}
         
         try:
-            # 使用browser-use执行搜索
-            search_result = await self.browser.search(search_query)
+            # 创建一个browser-use的Agent实例
+            agent = Agent(
+                task=f"搜索并获取有关'{search_query}'的信息。找到至少5个相关结果，提取标题、URL和摘要。",
+                llm=ChatOpenAI(**config.default_llm)
+            )
             
-            log_message = f"✅ 搜索完成，找到 {len(search_result.snippets)} 条结果"
+            # 运行代理，获取搜索结果
+            search_result = await agent.run()
+            
+            # 记录完成信息
+            log_message = f"✅ 搜索完成，获取到结果"
             logger.info(log_message)
-            if self.callback:
-                self.callback(log_message)
             
-            # 返回搜索结果
+            # 处理结果并返回
+            # 注意：实际结果格式取决于agent.run()返回的数据结构
+            # 这里假设结果可以解析为我们需要的格式
+            if isinstance(search_result, list):
+                results = search_result[:5]  # 只取前5个结果
+            elif isinstance(search_result, dict) and "results" in search_result:
+                results = search_result["results"][:5]
+            else:
+                # 如果返回格式不符合预期，尝试解析或返回原始结果
+                results = [{"title": "搜索结果", "url": "", "snippet": str(search_result)}]
+            
             yield {
-                "status": "complete", 
-                "message": log_message,
-                "results": [
-                    {
-                        "title": item.title,
-                        "url": item.url,
-                        "snippet": item.snippet
-                    } for item in search_result.snippets[:5]  # 仅返回前5个结果
-                ]
+                "type": "complete", 
+                "data": results
             }
             
-            # 为前3个结果提取更丰富的内容
-            for i, item in enumerate(search_result.snippets[:3]):
-                if i > 0:
-                    # 添加延迟以避免过快请求
-                    await asyncio.sleep(1)  
-                
-                log_message = f"🌐 正在获取详情: {item.title}"
-                logger.info(log_message)
-                if self.callback:
-                    self.callback(log_message)
-                
-                try:
-                    # 提取页面内容
-                    content = await self.browser.scrape_text(item.url)
-                    
-                    # 返回提取的内容
-                    yield {
-                        "status": "content", 
-                        "message": f"📄 已获取 '{item.title}' 的内容",
-                        "title": item.title,
-                        "url": item.url,
-                        "content": content[:1000]  # 限制内容长度
-                    }
-                except Exception as e:
-                    logger.error(f"提取内容失败: {str(e)}")
-                    if self.callback:
-                        self.callback(f"❌ 提取 '{item.title}' 内容失败: {str(e)}")
-        
         except Exception as e:
+            # 获取完整的调用栈信息
+            stack_trace = traceback.format_exc()
             error_message = f"❌ 浏览器搜索失败: {str(e)}"
             logger.error(error_message)
-            if self.callback:
-                self.callback(error_message)
-            
-            yield {"status": "error", "message": error_message}
-    
-    async def close(self):
-        """关闭浏览器"""
-        await self.browser.close() 
+            logger.error(f"调用栈信息:\n{stack_trace}")
+            yield {"type": "error", "data": error_message}

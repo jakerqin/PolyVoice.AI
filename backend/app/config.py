@@ -95,7 +95,7 @@ class Config:
             "base_url": base_llm.get("base_url"),
             "api_key": base_llm.get("api_key"),
             "max_tokens": base_llm.get("max_tokens", 4096),
-            "temperature": base_llm.get("temperature", 1.0),
+            "temperature": base_llm.get("temperature", 0.5),
             "api_type": base_llm.get("api_type", ""),
             "api_version": base_llm.get("api_version", "")
         }
@@ -118,6 +118,10 @@ class Config:
     @property
     def llm(self) -> Dict[str, LLMSettings]:
         return self._config.llm
+    
+    @property
+    def default_llm(self) -> LLMSettings:
+        return self._config.llm["default"]
     
     @property
     def tts(self) -> TTSSettings:
