@@ -9,6 +9,7 @@ PolyVoice.AI 是一个基于大语言模型和多模态技术的智能口语教�
 - **智能对话**：使用 DeepSeek-V3 大语言模型进行智能对话和口语评估
 - **多语言支持**：支持多种语言的语音识别和合成
 - **对话历史**：保存和加载对话历史，方便用户回顾学习过程
+- **智能诊断**：分析口语问题并提供针对性教学资源
 
 ## 技术栈
 
@@ -16,6 +17,7 @@ PolyVoice.AI 是一个基于大语言模型和多模态技术的智能口语教�
 - **大语言模型**：DeepSeek-V3
 - **语音识别**：Whisper
 - **语音合成**：VALL-E (通过 TTS 库)
+- **智能浏览**：Playwright, Browser-Use
 - **前端**：React, TypeScript (待实现)
 
 ## 安装与使用
@@ -25,6 +27,7 @@ PolyVoice.AI 是一个基于大语言模型和多模态技术的智能口语教�
 - Python 3.10-3.11
 - Poetry (Python 包管理器)
 - FFmpeg (用于音频处理)
+- Playwright (用于网络内容浏览)
 
 ### 安装步骤
 
@@ -44,6 +47,13 @@ brew install ffmpeg
 # 安装 Python 依赖
 cd backend
 poetry install
+
+# 安装 Playwright 浏览器
+# 如果使用 Poetry 环境
+poetry run python -m playwright install
+
+# 或者如果在全局环境
+python -m playwright install
 ```
 
 3. 配置

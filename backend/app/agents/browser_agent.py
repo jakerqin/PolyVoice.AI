@@ -5,45 +5,138 @@
 """
 
 import traceback
-from typing import List
+import json
+from typing import Callable
 from browser_use import Agent
 from app.logger import logger
 from app.config import config
 from langchain_openai import ChatOpenAI
+from autogen import AssistantAgent, GroupChat
 
-class BrowserAgent:
+# 定义一个辅助函数，在新线程中运行异步任务
+def run_async_in_thread(async_func, *args, **kwargs):
     """
-    浏览器智能体，负责执行网络搜索和内容提取任务
-    """
+    在单独的线程中运行异步函数并返回结果
     
-    async def search_content(self, keywords: List[str], query_type: str):
+    Args:
+        async_func: 要运行的异步函数
+        *args, **kwargs: 传递给异步函数的参数
+        
+    Returns:
+        异步函数的结果
+    """
+    import asyncio
+    import threading
+    
+    # 创建一个事件用于线程间同步
+    result_ready = threading.Event()
+    result = [None, None]  # [成功/失败标志, 结果/异常]
+    
+    # 在新线程中运行异步代码
+    def run_async():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            # 运行异步函数并保存结果
+            result[0] = True
+            result[1] = loop.run_until_complete(async_func(*args, **kwargs))
+        except Exception as e:
+            # 保存异常
+            result[0] = False
+            result[1] = e
+        finally:
+            # 通知主线程结果已就绪
+            result_ready.set()
+            loop.close()
+    
+    # 启动线程
+    thread = threading.Thread(target=run_async)
+    thread.start()
+    
+    # 等待异步操作完成
+    result_ready.wait()
+    
+    # 检查结果
+    if result[0]:
+        return result[1]  # 成功，返回结果
+    else:
+        raise result[1]  # 失败，重新抛出异常
+
+class BrowserAgent(AssistantAgent):
+
+    def __init__(self, message_callback: Callable = None):
+        super().__init__(
+            name='BrowserOperatorAgent',
+            human_input_mode='NEVER',
+            code_execution_config=False,
+            llm_config=False
+        )
+        # 初始化时提供一个占位符task，它将在execute_task中被覆盖
+        self.browser_agent = Agent(
+            task=f"搜索并获取有关英语教学的信息。找到至少5个相关结果，提取标题、URL和摘要。",
+            llm=ChatOpenAI(
+                # model=config.default_llm.model,
+                model="gpt-4o-mini",
+                api_key=config.default_llm.api_key,
+                base_url=config.default_llm.base_url,
+                temperature=config.default_llm.temperature
+            ),
+            use_vision=False,
+            enable_memory=False
+        )
+        
+        # 消息回调函数
+        self.message_callback = message_callback
+
+        # 注册消息回复函数（关键代码）
+        self.register_reply(
+            trigger=lambda msg: True,  # 使用lambda函数响应任何消息
+            reply_func=self.execute_steps,
+            position=0
+        )
+
+    def set_message_callback(self, callback: Callable):
         """
-        搜索相关教学内容
+        设置消息回调函数
         
         Args:
-            keywords: 关键词列表
-            query_type: 查询类型（pronunciation, grammar, etc）
-            
-        Yields:
-            搜索状态更新和结果
+            callback: 回调函数，将消息添加到列表中
         """
+        self.message_callback = callback
+        
+
+    def execute_steps(self, recipient, messages, sender, config):
+        """
+        处理前一个智能体的返回值，构建搜索查询并执行搜索任务
+        返回的格式需要是 (final: bool, reply: str)
+        """
+        # 获取最后一条消息内容
+        last_message = messages[-1]["content"]
+        
+        # 如果设置了回调函数，记录接收到的消息
+        self.message_callback(f"🔍 浏览器智能体收到消息: {last_message}")
+        
+        # 提取关键词
+        keywords = json.loads(last_message).get("search_keywords", [])
+        # 提取诊断摘要
+        diagnosis_summary = json.loads(last_message).get("summary", "")
+        self.message_callback(f"🔍 诊断摘要: {diagnosis_summary}")
+        
+        # 执行任务
         # 构建搜索查询
-        search_query = f"{' '.join(keywords)} {query_type} 教学视频"
+        search_query = f"{' '.join(keywords)} 教学视频"
         
         # 记录日志
         log_message = f"🔍 浏览器智能体开始搜索: {search_query}"
         logger.info(log_message)
-        yield {"type": "log", "data": log_message}
+        self.message_callback(log_message)
         
         try:
-            # 创建一个browser-use的Agent实例
-            agent = Agent(
-                task=f"搜索并获取有关'{search_query}'的信息。找到至少5个相关结果，提取标题、URL和摘要。",
-                llm=ChatOpenAI(**config.default_llm)
-            )
+            # 使用初始化时已创建的browser_agent，只需设置task
+            self.browser_agent.task = f"搜索并获取有关'{search_query}'的信息。找到至少3个相关结果，提取标题、URL和摘要。"
             
-            # 运行代理，获取搜索结果
-            search_result = await agent.run()
+            # 在新线程中运行异步代码
+            search_result = run_async_in_thread(self.browser_agent.run)
             
             # 记录完成信息
             log_message = f"✅ 搜索完成，获取到结果"
@@ -60,10 +153,18 @@ class BrowserAgent:
                 # 如果返回格式不符合预期，尝试解析或返回原始结果
                 results = [{"title": "搜索结果", "url": "", "snippet": str(search_result)}]
             
-            yield {
-                "type": "complete", 
-                "data": results
-            }
+            # 格式化搜索结果为字符串
+            formatted_results = "我找到了以下相关资源：\n\n"
+            for i, result in enumerate(results, 1):
+                title = result.get("title", "无标题")
+                url = result.get("url", "")
+                snippet = result.get("snippet", "")
+                
+                formatted_results += f"{i}. **{title}**\n"
+                formatted_results += f"   链接: {url}\n"
+                formatted_results += f"   摘要: {snippet}\n\n"
+            
+            return True, formatted_results
             
         except Exception as e:
             # 获取完整的调用栈信息
@@ -71,4 +172,10 @@ class BrowserAgent:
             error_message = f"❌ 浏览器搜索失败: {str(e)}"
             logger.error(error_message)
             logger.error(f"调用栈信息:\n{stack_trace}")
-            yield {"type": "error", "data": error_message}
+            
+            if self.message_callback:
+                self.message_callback(error_message)
+                
+            return False, error_message
+    
+    

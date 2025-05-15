@@ -21,7 +21,6 @@ class LLMSettings(BaseModel):
     max_tokens: int = Field(4096, description="Maximum number of tokens per request")
     temperature: float = Field(1.0, description="Sampling temperature")
     api_type: str = Field(None, description="AzureOpenai or Openai")
-    api_version: str = Field(None, description="Azure Openai version if AzureOpenai")
 
 class TTSSettings(BaseModel):
     model: str = Field(..., description="Model name")

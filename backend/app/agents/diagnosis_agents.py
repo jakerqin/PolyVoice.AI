@@ -3,16 +3,46 @@
 
 使用AutoGen构建的多智能体协作系统，负责提取诊断内容并调用浏览器智能体
 """
-
-import json
+import traceback
 from app.logger import logger
 from app.prompt.diagnosis import DIAGNOSIS_SYSTEM_PROMPT
-from app.prompt.browser import BROWSER_SYSTEM_PROMPT
 from app.prompt.diagnosis_extract import DIAGNOSIS_EXTRACT_SYSTEM_PROMPT
-from autogen import AssistantAgent, UserProxyAgent
+from autogen import AssistantAgent, GroupChat, GroupChatManager
 from app.config import config
 
 from .browser_agent import BrowserAgent
+
+class ContentExtractorAgent(AssistantAgent):
+    """
+    自定义内容提取智能体，可以将LLM的响应发送到前端
+    """
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 添加回调函数属性，用于向外部传递消息
+        self.message_callback = None
+    
+    def set_message_callback(self, callback):
+        """设置消息回调函数，用于将LLM响应传递给外部处理"""
+        self.message_callback = callback
+    
+    def _generate_reply(self, messages=None, sender=None, config=None):
+        """
+        重写_generate_reply方法以捕获LLM响应
+        注意：这里使用同步方法，不是异步方法
+        """
+        # 调用父类方法获取LLM响应
+        reply = super()._generate_reply(messages, sender, config)
+        
+        if reply and self.message_callback:
+            # 记录日志
+            log_message = f"💬 ContentExtractor响应: {reply}"
+            logger.info(log_message)
+            
+            # 通过回调函数发送到前端
+            self.message_callback(log_message)
+        
+        return reply
 
 class DiagnosisAgents:
     """
@@ -24,27 +54,28 @@ class DiagnosisAgents:
         初始化诊断智能体系统
         
         """
-        self.browser_agent = BrowserAgent()
-        
         # 配置LLM，这里使用系统环境变量中的API密钥
         self.llm_config = {
             "config_list": [{
                 "model": config.default_llm.model,
                 "api_key": config.default_llm.api_key,
                 "base_url": config.default_llm.base_url,
-                "api_type": config.default_llm.api_type or "",
-                "max_tokens": config.default_llm.max_tokens or 4096
+                "api_type": config.default_llm.api_type or "openai",
+                "max_tokens": config.default_llm.max_tokens or 4096,
             }],
             "temperature": config.default_llm.temperature or 0.7
         }
-        
-        # 创建内容提取智能体
-        self.content_extractor = AssistantAgent(
+
+        # 创建内容提取智能体，使用自定义的ContentExtractorAgent
+        self.contentExtractor = ContentExtractorAgent(
             name="ContentExtractor",
             system_message=DIAGNOSIS_SYSTEM_PROMPT,
             llm_config=self.llm_config,
         )
+        self.browserAgent = BrowserAgent()
         
+        # 存储要发送到前端的消息
+        self.frontend_messages = []
     
     async def analyze_content(self, diagnosis_content: str, diagnosis_type: str):
         """
@@ -63,81 +94,56 @@ class DiagnosisAgents:
         
         yield {"type": "log", "data": log_message}
         
+        # 清空之前的消息
+        self.frontend_messages = []
+        
+        # 设置回调函数，用于收集LLM回复
+        def collect_message(message):
+            """普通函数，将消息添加到列表中"""
+            self.frontend_messages.append({"type": "log", "data": message})
+            
+        # 将回调函数设置到ContentExtractor
+        self.contentExtractor.set_message_callback(collect_message)
+        self.browserAgent.set_message_callback(collect_message)
+        
         try:
-            # 创建一个任务，让内容提取智能体分析诊断内容
             extractor_prompt = DIAGNOSIS_EXTRACT_SYSTEM_PROMPT.format(diagnosis_type=diagnosis_type, diagnosis_content=diagnosis_content)
             
-            # 创建一个简单的用户代理来接收回复，不启动完整的对话
-            temp_user = UserProxyAgent(
-                name="TempUser",
-                human_input_mode="NEVER",
-                code_execution_config=False
+            groupchat = GroupChat(
+                agents=[
+                    self.contentExtractor,
+                    self.browserAgent
+                ],
+                messages=[],
+                max_round=2,
+                speaker_selection_method="round_robin"  # 使用轮流发言模式，确保每个智能体都有机会发言
+            )
+            manager = GroupChatManager(
+                groupchat=groupchat,
+                llm_config=self.llm_config
             )
             
-            # 让ContentExtractor回复一次消息
-            await self.content_extractor.a_initiate_chat(
-                temp_user,
+            # 启动对话 - 注意这里要同步调用，不需要await
+            manager.initiate_chat(
+                recipient=self.contentExtractor,  # 发送给内容提取智能体
                 message=extractor_prompt
             )
             
-            # 从内容提取智能体的最后一条消息中获取内容
-            messages = self.content_extractor.chat_messages[temp_user]
-            if messages and len(messages) > 0:
-                result_content = messages[-1]["content"]
-            else:
-                raise Exception("未能获取到内容提取智能体的响应")
+            # 将收集到的消息发送到前端
+            for message in self.frontend_messages:
+                yield message
             
-            # 尝试从消息中提取JSON
-            try:
-                # 查找消息中的JSON部分
-                json_start = result_content.find("{")
-                json_end = result_content.rfind("}") + 1
-                
-                if json_start >= 0 and json_end > json_start:
-                    json_str = result_content[json_start:json_end]
-                    extracted_data = json.loads(json_str)
-                else:
-                    # 如果没有找到JSON，则手动构建
-                    extracted_data = {
-                        "key_issues": [diagnosis_type + " issues"],
-                        "search_keywords": [diagnosis_content.split()[:3]],
-                        "summary": diagnosis_content[:100]
-                    }
-            except Exception as e:
-                logger.error(f"解析JSON失败: {str(e)}")
-                # 构建一个默认的提取结果
-                extracted_data = {
-                    "key_issues": [diagnosis_type + " problems"],
-                    "search_keywords": [w for w in diagnosis_content.split()[:5] if len(w) > 3],
-                    "summary": diagnosis_content[:100]
-                }
+            # 完成处理
+            yield {"type": "complete", "data": "诊断分析完成"}
             
-            # 返回提取的数据
-            log_message = f"extract_agent: 📑 提取了关键内容: {extracted_data}"
-            yield {
-                "type": "log", 
-                "data": f"📑 提取了关键内容: {', '.join(extracted_data.get('search_keywords', []))}",
-            }
-            
-            # 使用提取的关键词调用浏览器智能体
-            search_keywords = extracted_data.get("search_keywords", [])
-            if not search_keywords:
-                search_keywords = [w for w in diagnosis_content.split()[:5] if len(w) > 3]
-            
-            # 执行搜索
-            async for result in self.browser_agent.search_content(search_keywords, diagnosis_type):
-                yield result
-                
         except Exception as e:
             error_message = f"❌ 处理诊断内容失败: {str(e)}"
             logger.error(error_message)
-            
+            logger.error(f"调用栈信息:\n{traceback.format_exc()}")
             yield {"type": "error", "data": error_message}
     
-    async def close(self):
-        """清理资源"""
-        await self.browser_agent.close()
 
+agents = DiagnosisAgents()
 
 async def start_diagnosis_session(diagnosis_content: str, diagnosis_type: str):
     """
@@ -150,7 +156,5 @@ async def start_diagnosis_session(diagnosis_content: str, diagnosis_type: str):
     Yields:
         处理状态和结果
     """
-    agents = DiagnosisAgents()
-    
     async for result in agents.analyze_content(diagnosis_content, diagnosis_type):
         yield result

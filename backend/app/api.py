@@ -142,7 +142,7 @@ async def pre_advanced_diagnosis(
             "content": request.content,
             "diagnosis_type": diagnosis_type
         }
-        
+
         return {"session_id": session_id}
     except Exception as e:
         logger.error(f"处理高级诊断出错: {str(e)}")
@@ -167,12 +167,15 @@ async def advanced_diagnosis(
     """
     try:
         # 读取请求体
-        if session_id not in diagnosis_sessions:
-            raise HTTPException(status_code=404, detail="会话不存在或已过期")
+        # if session_id not in diagnosis_sessions:
+        #     raise HTTPException(status_code=404, detail="会话不存在或已过期")
         
-        diagnosis_req = diagnosis_sessions[session_id]
-        diagnosis_content = diagnosis_req["content"]
-        diagnosis_type = diagnosis_req["diagnosis_type"]
+        # diagnosis_req = diagnosis_sessions[session_id]
+        # diagnosis_content = diagnosis_req["content"]
+        # diagnosis_type = diagnosis_req["diagnosis_type"]
+
+        diagnosis_content = "Instead of 'the two world war,' it should be 'the two world wars' (plural)."
+        diagnosis_type = "grammar"
             
         # 验证诊断类型
         valid_types = ["pronunciation", "grammar", "userResponse"]
