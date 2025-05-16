@@ -9,9 +9,9 @@ import json
 from typing import Callable
 from browser_use import Agent
 from app.logger import logger
-from app.config import config
+from app.config import config as app_config
 from langchain_openai import ChatOpenAI
-from autogen import AssistantAgent, GroupChat
+from autogen import AssistantAgent
 
 # 定义一个辅助函数，在新线程中运行异步任务
 def run_async_in_thread(async_func, *args, **kwargs):
@@ -71,19 +71,6 @@ class BrowserAgent(AssistantAgent):
             code_execution_config=False,
             llm_config=False
         )
-        # 初始化时提供一个占位符task，它将在execute_task中被覆盖
-        self.browser_agent = Agent(
-            task=f"搜索并获取有关英语教学的信息。找到至少5个相关结果，提取标题、URL和摘要。",
-            llm=ChatOpenAI(
-                # model=config.default_llm.model,
-                model="gpt-4o-mini",
-                api_key=config.default_llm.api_key,
-                base_url=config.default_llm.base_url,
-                temperature=config.default_llm.temperature
-            ),
-            use_vision=False,
-            enable_memory=False
-        )
         
         # 消息回调函数
         self.message_callback = message_callback
@@ -124,7 +111,7 @@ class BrowserAgent(AssistantAgent):
         
         # 执行任务
         # 构建搜索查询
-        search_query = f"{' '.join(keywords)} 教学视频"
+        search_query = ' '.join(keywords)
         
         # 记录日志
         log_message = f"🔍 浏览器智能体开始搜索: {search_query}"
@@ -132,11 +119,22 @@ class BrowserAgent(AssistantAgent):
         self.message_callback(log_message)
         
         try:
-            # 使用初始化时已创建的browser_agent，只需设置task
-            self.browser_agent.task = f"搜索并获取有关'{search_query}'的信息。找到至少3个相关结果，提取标题、URL和摘要。"
+            # 每次搜索创建新的Agent实例
+            task = f"从www.bilibili.com网址搜索'{search_query}'的信息。找到至少3个相关结果，提取标题、URL和摘要。"
+            browser_agent = Agent(
+                task=task,
+                llm=ChatOpenAI(
+                    model="gpt-4o-mini",
+                    api_key=app_config.default_llm.api_key,
+                    base_url=app_config.default_llm.base_url,
+                    temperature=app_config.default_llm.temperature
+                ),
+                use_vision=False,
+                enable_memory=False
+            )
             
             # 在新线程中运行异步代码
-            search_result = run_async_in_thread(self.browser_agent.run)
+            search_result = run_async_in_thread(browser_agent.run)
             
             # 记录完成信息
             log_message = f"✅ 搜索完成，获取到结果"
